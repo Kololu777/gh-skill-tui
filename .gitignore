@@ -1,3 +1,5 @@
 /gh-skill-tui
 *.test
 .DS_Store
+.worktrees/
+.codex-homes/
