@@ -118,13 +118,7 @@ func mergeConfigAgents(builtin []installTarget) []installTarget {
 		byName[p.Name] = i
 	}
 	for _, pc := range configured {
-		p := installTarget{
-			Name:       pc.Name,
-			Short:      pc.Short,
-			GHAgent:    pc.GHAgent,
-			UserDir:    pc.UserDir,
-			ProjectDir: pc.ProjectDir,
-		}
+		p := installTarget(pc)
 		if p.Short == "" {
 			p.Short = p.Name
 		}

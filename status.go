@@ -63,20 +63,6 @@ type scanTarget struct {
 	Err     string
 }
 
-func (t scanTarget) counts() (managed, foreign, untracked int) {
-	for _, s := range t.Skills {
-		switch s.Class {
-		case classManaged:
-			managed++
-		case classForeign:
-			foreign++
-		default:
-			untracked++
-		}
-	}
-	return
-}
-
 type skillMeta struct {
 	Repo       string
 	Path       string
@@ -467,8 +453,8 @@ func reconstructSkillMD(source, installed string) string {
 // "blob <len>\0<content>"), matching what git and the GitHub tree API report.
 func gitBlobSha(content []byte) string {
 	h := sha1.New()
-	fmt.Fprintf(h, "blob %d\x00", len(content))
-	h.Write(content)
+	_, _ = fmt.Fprintf(h, "blob %d\x00", len(content))
+	_, _ = h.Write(content)
 	return hex.EncodeToString(h.Sum(nil))
 }
 

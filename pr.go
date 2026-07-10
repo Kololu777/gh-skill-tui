@@ -530,7 +530,9 @@ func diffTexts(source, installed string) (string, error) {
 			return "", err
 		}
 		if _, err := f.WriteString(content); err != nil {
-			f.Close()
+			if closeErr := f.Close(); closeErr != nil {
+				return "", fmt.Errorf("write temporary diff file: %w (close: %v)", err, closeErr)
+			}
 			return "", err
 		}
 		return f.Name(), f.Close()
@@ -539,12 +541,12 @@ func diffTexts(source, installed string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer os.Remove(a)
+	defer func() { _ = os.Remove(a) }()
 	b, err := writeTemp(installed)
 	if err != nil {
 		return "", err
 	}
-	defer os.Remove(b)
+	defer func() { _ = os.Remove(b) }()
 	// exit status 1 just means "files differ"
 	out, _ := exec.Command(git, "diff", "--no-index", "--no-color", "--unified=3", "--", a, b).Output()
 	// keep the full git-style structure (diff-so-fancy hard-requires the
@@ -596,9 +598,13 @@ func runPRLocal(plan prPlan) (string, error) {
 		return "", err
 	}
 	idxPath := idx.Name()
-	idx.Close()
-	os.Remove(idxPath) // git wants to create it itself
-	defer os.Remove(idxPath)
+	if err := idx.Close(); err != nil {
+		return "", fmt.Errorf("close temporary index: %w", err)
+	}
+	if err := os.Remove(idxPath); err != nil && !os.IsNotExist(err) {
+		return "", fmt.Errorf("remove temporary index: %w", err)
+	}
+	defer func() { _ = os.Remove(idxPath) }()
 	env := []string{"GIT_INDEX_FILE=" + idxPath}
 
 	if _, err := runGitFull(root, env, "", "read-tree", "HEAD"); err != nil {

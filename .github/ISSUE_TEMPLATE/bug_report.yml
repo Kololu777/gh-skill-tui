@@ -1,0 +1,61 @@
+name: バグ報告
+description: 再現可能な不具合を報告する
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        報告ありがとうございます。再現手順と環境情報をできるだけ具体的に記載してください。
+
+  - type: textarea
+    id: description
+    attributes:
+      label: 不具合の概要
+      description: 何が起きたか、期待していた動作は何かを記載してください。
+      placeholder: |
+        期待する動作:
+        実際の動作:
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: 再現手順
+      description: 最小限の再現手順やコマンドを記載してください。
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: バージョンまたはコミット
+      placeholder: v0.1.0 / abc1234
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: 実行環境
+      description: OS、Go、gh、利用している agent などを記載してください。
+      placeholder: |
+        OS: Ubuntu 24.04
+        Go: 1.22.x
+        gh: x.y.z
+        agent: Codex
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: ログやスクリーンショット
+      description: 秘密情報を削除して貼り付けてください。
+      render: shell

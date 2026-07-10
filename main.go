@@ -163,19 +163,26 @@ func parseArgs(args []string) (config, error) {
 }
 
 func printUsage(out *os.File) {
-	fmt.Fprintln(out, "usage: gh-skill-tui [--source OWNER/REPO|DIR] [--ref REF] [--scope project|user] [--agent AGENT]")
-	fmt.Fprintln(out, "                    [--dir DIR] [--force] [--config PATH] [--select] [--dry-run]")
-	fmt.Fprintln(out, "                    [OWNER/REPO|DIR] [gh skill install flags...]")
-	fmt.Fprintln(out, "")
-	fmt.Fprintln(out, "panels: 0 tree  1 skills  2 agents  3 installed  4 preview")
-	fmt.Fprintln(out, "keys:   0-4/h/l focus panel  j/k move  space select  enter detail/confirm")
-	fmt.Fprintln(out, "        i install/update/adopt plan  p PR/MR plan  d delete plan")
-	fmt.Fprintln(out, "        P pick an outside-source destination  u scope  f overwrite override  s search  r rescan  q back/quit")
-	fmt.Fprintln(out, "")
-	fmt.Fprintln(out, "config: ~/.config/gh-skill-tui/config.toml (or --config PATH)")
-	fmt.Fprintln(out, "        source, scope, force, default_agents, allowed_sources, allowed_local_roots,")
-	fmt.Fprintln(out, "        new_skill_dir, diff_command (e.g. \"delta --color-only --paging=never\"), [[agents]]")
-	fmt.Fprintln(out, "        legacy [[providers]] is still accepted as a compatibility alias")
-	fmt.Fprintln(out, "env (overrides config): GH_SKILL_DEFAULT_SOURCE, GH_SKILL_DEFAULT_AGENTS,")
-	fmt.Fprintln(out, "        GH_SKILL_DEFAULT_SCOPE, GH_SKILL_ALLOWED_SOURCES, GH_SKILL_ALLOWED_LOCAL_ROOTS")
+	lines := []string{
+		"usage: gh-skill-tui [--source OWNER/REPO|DIR] [--ref REF] [--scope project|user] [--agent AGENT]",
+		"                    [--dir DIR] [--force] [--config PATH] [--select] [--dry-run]",
+		"                    [OWNER/REPO|DIR] [gh skill install flags...]",
+		"",
+		"panels: 0 tree  1 skills  2 agents  3 installed  4 preview",
+		"keys:   0-4/h/l focus panel  j/k move  space select  enter detail/confirm",
+		"        i install/update/adopt plan  p PR/MR plan  d delete plan",
+		"        P pick an outside-source destination  u scope  f overwrite override  s search  r rescan  q back/quit",
+		"",
+		"config: ~/.config/gh-skill-tui/config.toml (or --config PATH)",
+		"        source, scope, force, default_agents, allowed_sources, allowed_local_roots,",
+		"        new_skill_dir, diff_command (e.g. \"delta --color-only --paging=never\"), [[agents]]",
+		"        legacy [[providers]] is still accepted as a compatibility alias",
+		"env (overrides config): GH_SKILL_DEFAULT_SOURCE, GH_SKILL_DEFAULT_AGENTS,",
+		"        GH_SKILL_DEFAULT_SCOPE, GH_SKILL_ALLOWED_SOURCES, GH_SKILL_ALLOWED_LOCAL_ROOTS",
+	}
+	for _, line := range lines {
+		if _, err := fmt.Fprintln(out, line); err != nil {
+			return
+		}
+	}
 }

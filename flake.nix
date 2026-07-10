@@ -51,6 +51,7 @@
               git
               golangci-lint
               actionlint
+              yamllint
             ];
           };
         });

@@ -1,0 +1,31 @@
+name: Workflow lint
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  actionlint:
+    name: actionlint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v6
+
+      - name: Validate GitHub Actions workflows
+        uses: raven-actions/actionlint@v2
+
+      - name: Install yamllint
+        run: |
+          python3 -m venv "$RUNNER_TEMP/yamllint"
+          "$RUNNER_TEMP/yamllint/bin/python" -m pip install --disable-pip-version-check yamllint==1.37.1
+
+      - name: Validate YAML files
+        run: |
+          "$RUNNER_TEMP/yamllint/bin/yamllint" .github

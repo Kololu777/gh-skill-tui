@@ -1,9 +1,9 @@
-GOLANGCI_LINT_VERSION ?= v2.12.0
+GOLANGCI_LINT_VERSION ?= v2.12.2
 ACTIONLINT_VERSION ?= v1.7.12
 
 GO_FILES := $(shell find . -type f -name '*.go' -not -path './vendor/*')
 
-.PHONY: format fmt format-check lint vet test build actionlint check tools
+.PHONY: format fmt format-check lint vet test build actionlint yaml-lint check tools
 
 format fmt:
 	gofmt -w $(GO_FILES)
@@ -30,7 +30,10 @@ build:
 actionlint:
 	actionlint
 
-check: format-check vet lint test build actionlint
+yaml-lint:
+	yamllint .github
+
+check: format-check vet lint test build actionlint yaml-lint
 
 tools:
 	go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)

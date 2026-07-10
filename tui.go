@@ -350,20 +350,30 @@ func (e *prExec) Run() error {
 	if out == nil {
 		out = os.Stdout
 	}
+	write := func(format string, args ...any) error {
+		_, err := fmt.Fprintf(out, format, args...)
+		return err
+	}
 	target := e.plan.Repo
 	if !e.plan.Remote {
 		target = homeShorten(e.plan.SourceRoot)
 	}
-	fmt.Fprintf(out, "→ creating branch %s on %s (%d file(s))\n", e.plan.Branch, target, len(e.plan.Files))
+	if err := write("→ creating branch %s on %s (%d file(s))\n", e.plan.Branch, target, len(e.plan.Files)); err != nil {
+		return err
+	}
 	summary, err := runPR(e.plan)
 	e.result = executionResult{Kind: opPR, Summary: summary}
 	if err != nil {
 		e.result.Summary = "PR failed"
 		e.result.Failed = append(e.result.Failed, err.Error())
-		fmt.Fprintf(out, "✗ %v\n", err)
+		if writeErr := write("✗ %v\n", err); writeErr != nil {
+			return writeErr
+		}
 	} else {
 		e.result.Succeeded = append(e.result.Succeeded, e.plan.Title)
-		fmt.Fprintf(out, "✓ %s\n", summary)
+		if writeErr := write("✓ %s\n", summary); writeErr != nil {
+			return writeErr
+		}
 	}
 	return nil
 }
@@ -407,14 +417,26 @@ func (e *planExec) Run() error {
 	if errOut == nil {
 		errOut = out
 	}
+	writeOut := func(format string, args ...any) error {
+		_, err := fmt.Fprintf(out, format, args...)
+		return err
+	}
+	writeErr := func(format string, args ...any) error {
+		_, err := fmt.Fprintf(errOut, format, args...)
+		return err
+	}
 	e.result = executionResult{Kind: e.kind, Skipped: append([]string(nil), e.skipped...)}
 	for _, note := range e.skipped {
-		fmt.Fprintf(out, "skip: %s\n", note)
+		if err := writeOut("skip: %s\n", note); err != nil {
+			return err
+		}
 	}
 	switch e.kind {
 	case opInstall:
 		for _, entry := range e.installs {
-			fmt.Fprintf(out, "→ %s %s → %s (%s)\n", strings.ToUpper(firstNonEmpty(entry.Action, "install")), entry.Skill, entry.Agent, entry.Dest)
+			if err := writeOut("→ %s %s → %s (%s)\n", strings.ToUpper(firstNonEmpty(entry.Action, "install")), entry.Skill, entry.Agent, entry.Dest); err != nil {
+				return err
+			}
 			var log commandLog
 			cmd := exec.Command(entry.Args[0], entry.Args[1:]...)
 			cmd.Stdin = e.stdin
@@ -426,24 +448,32 @@ func (e *planExec) Run() error {
 					failure += "\n" + detail
 				}
 				e.result.Failed = append(e.result.Failed, failure)
-				fmt.Fprintln(errOut, "✗ "+failure)
+				if writeErrErr := writeErr("✗ %s\n", failure); writeErrErr != nil {
+					return writeErrErr
+				}
 				continue
 			}
 			if entry.TreeSha != "" && entry.DestAbs != "" && entry.SourceSkillAbs != "" {
 				if err := injectLocalTracking(entry.DestAbs, entry.SourceSkillAbs, entry.TreeSha); err != nil {
 					e.result.Skipped = append(e.result.Skipped, "tracking metadata: "+err.Error())
-					fmt.Fprintln(errOut, "warning: "+err.Error())
+					if writeErrErr := writeErr("warning: %s\n", err); writeErrErr != nil {
+						return writeErrErr
+					}
 				}
 			}
 			e.result.Succeeded = append(e.result.Succeeded, entry.Skill+" → "+entry.Agent)
 		}
 	case opDelete:
 		for _, entry := range e.deletes {
-			fmt.Fprintf(out, "→ DELETE %s (%s)\n", entry.Dir, entry.Agents)
+			if err := writeOut("→ DELETE %s (%s)\n", entry.Dir, entry.Agents); err != nil {
+				return err
+			}
 			if errs := deleteInstalled([]deleteEntry{entry}); len(errs) > 0 {
 				e.result.Failed = append(e.result.Failed, errs...)
 				for _, failure := range errs {
-					fmt.Fprintln(errOut, "✗ "+failure)
+					if writeErrErr := writeErr("✗ %s\n", failure); writeErrErr != nil {
+						return writeErrErr
+					}
 				}
 				continue
 			}
@@ -1323,12 +1353,6 @@ func (m model) openPRPlan() (tea.Model, tea.Cmd) {
 	m.prPlan = plan
 	m.beginPlan(opPR, blocks, nil)
 	return m, nil
-}
-
-// openConfirm is retained for select-only callers and older internal call
-// sites; normal interaction uses i and resolves an install plan explicitly.
-func (m model) openConfirm() (tea.Model, tea.Cmd) {
-	return m.openInstallPlan()
 }
 
 func (m *model) ensurePreviewCmd() tea.Cmd {
@@ -2714,13 +2738,11 @@ func (m model) statusDetail(w int) (string, []string) {
 			}
 		} else if s.Class == classManaged && s.TreeSha != "" {
 			if current, ok := m.treeShas[s.Key()]; ok && current != s.TreeSha {
-				mark = "↓"
 				markStyled = updateStyle.Render("↓")
 				note = " (outdated)"
 			}
 		}
 		if note == "" && s.Class == classManaged && m.copyModified(s) {
-			mark = "m"
 			markStyled = modifiedStyle.Render("m")
 			note = " (edited locally)"
 		}
