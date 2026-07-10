@@ -49,6 +49,8 @@
               go
               gh
               git
+              golangci-lint
+              actionlint
             ];
           };
         });
