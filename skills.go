@@ -73,6 +73,12 @@ func loadSkills(cfg config) ([]skill, string, map[string]string, map[string]stri
 	}
 
 	ref := cfg.Ref
+	if cfg.Pin != "" {
+		// A project pin is the immutable revision we must inspect and install.
+		// Ref/branch remains useful as human-readable project policy, but the
+		// tree API must be read at the pinned revision.
+		ref = cfg.Pin
+	}
 	var err error
 	if ref == "" {
 		ref, err = defaultRef(cfg.Source)
@@ -223,6 +229,9 @@ func readSkillContent(cfg config, ref, path string) (string, error) {
 
 	if ref == "" {
 		ref = cfg.Ref
+	}
+	if cfg.Pin != "" {
+		ref = cfg.Pin
 	}
 	if ref == "" {
 		var err error

@@ -214,7 +214,7 @@ func (m model) autoDestDir(cp localCopy) (string, error) {
 			}
 		}
 	}
-	if d := strings.Trim(strings.TrimSpace(fileCfg.NewSkillDir), "/"); d != "" {
+	if d := strings.Trim(strings.TrimSpace(activeFileConfig().NewSkillDir), "/"); d != "" {
 		if dest := path.Join(d, name); free(dest) {
 			return dest, nil
 		}

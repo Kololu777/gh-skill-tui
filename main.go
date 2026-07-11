@@ -12,20 +12,27 @@ import (
 const defaultSource = "Kololu777/private-skills"
 
 type config struct {
-	Source      string
-	Ref         string
-	Scope       string
-	Force       bool
-	AgentArg    string
-	DirArg      string
-	InstallArgs []string
-	SelectOnly  bool
-	DryRun      bool
+	Source            string
+	Ref               string
+	Pin               string
+	Scope             string
+	Force             bool
+	AgentArg          string
+	DirArg            string
+	InstallArgs       []string
+	CheckIgnoreSkills []string
+	Command           string
+	SelectOnly        bool
+	DryRun            bool
 }
 
 func main() {
 	if err := loadFileConfig(configPathFromArgs(os.Args[1:])); err != nil {
 		fmt.Fprintln(os.Stderr, "config error:", err)
+		os.Exit(2)
+	}
+	if err := loadProjectConfig(findProjectRoot()); err != nil {
+		fmt.Fprintln(os.Stderr, "project config error:", err)
 		os.Exit(2)
 	}
 	cfg, err := parseArgs(os.Args[1:])
@@ -37,6 +44,16 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		printUsage(os.Stderr)
 		os.Exit(2)
+	}
+	if cfg.Command == "check" {
+		if err := runCheckCommand(cfg, os.Stdout); err != nil {
+			if errors.Is(err, errCheckFailed) {
+				os.Exit(1)
+			}
+			fmt.Fprintln(os.Stderr, "check error:", err)
+			os.Exit(2)
+		}
+		return
 	}
 
 	m := newModel(cfg)
@@ -62,12 +79,19 @@ func main() {
 var errHelp = errors.New("help requested")
 
 func parseArgs(args []string) (config, error) {
+	active := activeFileConfig()
 	cfg := config{
-		Source: envDefault("GH_SKILL_DEFAULT_SOURCE", firstNonEmpty(fileCfg.Source, defaultSource)),
-		Scope:  envDefault("GH_SKILL_DEFAULT_SCOPE", firstNonEmpty(fileCfg.Scope, "project")),
-		Force:  fileCfg.Force,
+		Source:            envDefault("GH_SKILL_DEFAULT_SOURCE", firstNonEmpty(active.Source, defaultSource)),
+		Ref:               firstNonEmpty(active.Branch, active.Ref),
+		Pin:               firstNonEmpty(active.Hash, active.Commit, active.Pin),
+		Scope:             envDefault("GH_SKILL_DEFAULT_SCOPE", firstNonEmpty(active.Scope, "project")),
+		Force:             active.Force,
+		CheckIgnoreSkills: checkIgnoreSkills(active),
 	}
 	sourceSet := false
+	commandSet := false
+	refSet := false
+	pinSet := false
 
 	valueInstallFlags := map[string]bool{
 		"--pin": true,
@@ -102,8 +126,37 @@ func parseArgs(args []string) (config, error) {
 				return cfg, err
 			}
 			cfg.Ref = v
+			refSet = true
+		case arg == "--branch":
+			v, err := takeValue(&i, arg)
+			if err != nil {
+				return cfg, err
+			}
+			cfg.Ref = v
+			refSet = true
 		case strings.HasPrefix(arg, "--ref="):
 			cfg.Ref = strings.TrimPrefix(arg, "--ref=")
+			refSet = true
+		case strings.HasPrefix(arg, "--branch="):
+			cfg.Ref = strings.TrimPrefix(arg, "--branch=")
+			refSet = true
+		case arg == "--hash" || arg == "--commit":
+			v, err := takeValue(&i, arg)
+			if err != nil {
+				return cfg, err
+			}
+			cfg.Pin = v
+			pinSet = true
+		case strings.HasPrefix(arg, "--hash="):
+			cfg.Pin = strings.TrimPrefix(arg, "--hash=")
+			pinSet = true
+		case strings.HasPrefix(arg, "--commit="):
+			cfg.Pin = strings.TrimPrefix(arg, "--commit=")
+			pinSet = true
+		case strings.HasPrefix(arg, "--pin="):
+			cfg.Pin = strings.TrimPrefix(arg, "--pin=")
+			pinSet = true
+			cfg.InstallArgs = append(cfg.InstallArgs, arg)
 		case arg == "--source":
 			v, err := takeValue(&i, arg)
 			if err != nil {
@@ -141,13 +194,23 @@ func parseArgs(args []string) (config, error) {
 		case arg == "--":
 			cfg.InstallArgs = append(cfg.InstallArgs, args[i+1:]...)
 			i = len(args)
+		case !commandSet && arg == "check":
+			cfg.Command = "check"
+			commandSet = true
 		case strings.HasPrefix(arg, "-"):
 			cfg.InstallArgs = append(cfg.InstallArgs, arg)
 			if valueInstallFlags[arg] && i+1 < len(args) {
 				i++
+				if arg == "--pin" {
+					cfg.Pin = args[i]
+					pinSet = true
+				}
 				cfg.InstallArgs = append(cfg.InstallArgs, args[i])
 			}
-		case !sourceSet:
+		case !commandSet && !sourceSet:
+			cfg.Source = arg
+			sourceSet = true
+		case commandSet && cfg.Command == "check" && !sourceSet:
 			cfg.Source = arg
 			sourceSet = true
 		default:
@@ -158,6 +221,9 @@ func parseArgs(args []string) (config, error) {
 	if cfg.Scope != "project" && cfg.Scope != "user" {
 		return cfg, fmt.Errorf("--scope must be project or user, got %q", cfg.Scope)
 	}
+	if cfg.Command == "check" {
+		cfg = applyCheckTableConfig(cfg, sourceSet, refSet, pinSet)
+	}
 
 	return cfg, nil
 }
@@ -167,6 +233,7 @@ func printUsage(out *os.File) {
 		"usage: gh-skill-tui [--source OWNER/REPO|DIR] [--ref REF] [--scope project|user] [--agent AGENT]",
 		"                    [--dir DIR] [--force] [--config PATH] [--select] [--dry-run]",
 		"                    [OWNER/REPO|DIR] [gh skill install flags...]",
+		"       gh-skill-tui check [--source OWNER/REPO|DIR] [--ref REF] [--pin HASH]",
 		"",
 		"panels: 0 tree  1 skills  2 agents  3 installed  4 preview",
 		"keys:   0-4/h/l focus panel  j/k move  space select  enter detail/confirm",
@@ -174,6 +241,9 @@ func printUsage(out *os.File) {
 		"        P pick an outside-source destination  u scope  f overwrite override  s search  r rescan  q back/quit",
 		"",
 		"config: ~/.config/gh-skill-tui/config.toml (or --config PATH)",
+		"        project-local .gh-skill-tui.toml (aliases: gh-skill-tui.toml, .gst.toml, gst.toml)",
+		"        branch/ref and hash/commit/pin may pin a project to one source revision",
+		"        check_ignore_skills (or [check].ignore_skills) exempts outside skills",
 		"        source, scope, force, default_agents, allowed_sources, allowed_local_roots,",
 		"        new_skill_dir, diff_command (e.g. \"delta --color-only --paging=never\"), [[agents]]",
 		"        legacy [[providers]] is still accepted as a compatibility alias",

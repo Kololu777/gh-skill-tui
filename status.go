@@ -149,10 +149,11 @@ func classify(meta skillMeta, allowed []string, allowedRoots []string) skillClas
 // config file's allowed_local_roots) plus the current session's local
 // source, if any.
 func allowedLocalRoots(source string) []string {
+	active := activeFileConfig()
 	raw := os.Getenv("GH_SKILL_ALLOWED_LOCAL_ROOTS")
 	candidates := strings.Split(raw, ",")
 	if raw == "" {
-		candidates = fileCfg.AllowedLocalRoots
+		candidates = active.AllowedLocalRoots
 	}
 	var roots []string
 	for _, r := range candidates {

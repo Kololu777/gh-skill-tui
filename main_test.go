@@ -1053,7 +1053,9 @@ func TestRunPRLocalCreatesBranchWithoutTouchingWorktree(t *testing.T) {
 		t.Fatal(err)
 	}
 	mustGit(src, "add", "-A")
-	mustGit(src, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "v1")
+	mustGit(src, "config", "user.email", "t@t")
+	mustGit(src, "config", "user.name", "t")
+	mustGit(src, "commit", "-qm", "v1")
 	bare := t.TempDir()
 	mustGit(bare, "init", "-q", "--bare")
 	mustGit(src, "remote", "add", "origin", bare)
@@ -1997,7 +1999,9 @@ func TestRunPRLocalAddsNewSkillPath(t *testing.T) {
 		t.Fatal(err)
 	}
 	mustGit(src, "add", "-A")
-	mustGit(src, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "v1")
+	mustGit(src, "config", "user.email", "t@t")
+	mustGit(src, "config", "user.name", "t")
+	mustGit(src, "commit", "-qm", "v1")
 	bare := t.TempDir()
 	mustGit(bare, "init", "-q", "--bare")
 	mustGit(src, "remote", "add", "origin", bare)
@@ -2031,5 +2035,181 @@ func TestRunPRLocalAddsNewSkillPath(t *testing.T) {
 	}
 	if got := mustGit(bare, "rev-parse", "refs/heads/"+plan.Branch); got == "" {
 		t.Fatal("branch not pushed to origin")
+	}
+}
+
+func makeCheckSource(t *testing.T, body string) string {
+	t.Helper()
+	if _, err := commandPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	src := t.TempDir()
+	gitRun := func(args ...string) {
+		t.Helper()
+		if out, err := runGit(src, args...); err != nil {
+			t.Fatalf("git %v: %v %s", args, err, out)
+		}
+	}
+	path := filepath.Join(src, "skills", "demo", "SKILL.md")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("---\nname: demo\n---\n"+body+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun("init", "-q")
+	gitRun("config", "user.email", "test@example.com")
+	gitRun("config", "user.name", "test")
+	gitRun("add", "skills/demo/SKILL.md")
+	gitRun("commit", "-qm", "demo")
+	return src
+}
+
+func writeLocalInstalledSkill(t *testing.T, projectRoot, sourceRoot, body, treeSHA string) {
+	t.Helper()
+	dir := filepath.Join(projectRoot, ".agents", "skills", "demo")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	content := "---\nname: demo\nmetadata:\n    local-path: " + filepath.Join(sourceRoot, "skills", "demo") + "\n    tui-tree-sha: " + treeSHA + "\n---\n" + body + "\n"
+	if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSkillCheckFindsOutdatedCopies(t *testing.T) {
+	fileCfg = fileConfig{}
+	projectCfg = fileConfig{}
+	projectCfgPath = ""
+	t.Cleanup(func() {
+		fileCfg = fileConfig{}
+		projectCfg = fileConfig{}
+		projectCfgPath = ""
+	})
+	source := makeCheckSource(t, "old")
+	project := t.TempDir()
+	skills, _, trees, _, err := loadSkills(config{Source: source})
+	if err != nil || len(skills) != 1 {
+		t.Fatalf("load source: skills=%v err=%v", skills, err)
+	}
+	oldTree := trees[filepath.Join(source, "skills", "demo")]
+	writeLocalInstalledSkill(t, project, source, "old", oldTree)
+
+	good, err := runSkillCheck(config{Source: source, Scope: "project"}, project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(good.Issues) != 0 || good.Checked != 1 {
+		t.Fatalf("current check = %+v", good)
+	}
+
+	path := filepath.Join(source, "skills", "demo", "SKILL.md")
+	if err := os.WriteFile(path, []byte("---\nname: demo\n---\nnew\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := runGit(source, "add", "skills/demo/SKILL.md"); err != nil {
+		t.Fatalf("git add: %v %s", err, out)
+	}
+	if out, err := runGit(source, "commit", "-qm", "update"); err != nil {
+		t.Fatalf("git commit: %v %s", err, out)
+	}
+
+	bad, err := runSkillCheck(config{Source: source, Scope: "project"}, project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(bad.Issues) != 1 || bad.Issues[0].Kind != "outdated" {
+		t.Fatalf("outdated check = %+v", bad)
+	}
+}
+
+func TestSkillCheckIgnoreOutsideSkill(t *testing.T) {
+	fileCfg = fileConfig{}
+	projectCfg = fileConfig{}
+	projectCfgPath = ""
+	t.Cleanup(func() {
+		fileCfg = fileConfig{}
+		projectCfg = fileConfig{}
+		projectCfgPath = ""
+	})
+	source := makeCheckSource(t, "body")
+	project := t.TempDir()
+	dir := filepath.Join(project, ".agents", "skills", "local-only")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte("---\nname: local-only\n---\nbody\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	bad, err := runSkillCheck(config{Source: source, Scope: "project"}, project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(bad.Issues) != 1 || bad.Issues[0].Kind != "outside" {
+		t.Fatalf("outside check = %+v", bad)
+	}
+	good, err := runSkillCheck(config{Source: source, Scope: "project", CheckIgnoreSkills: []string{"local-only"}}, project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(good.Issues) != 0 || good.Ignored != 1 {
+		t.Fatalf("ignored check = %+v", good)
+	}
+}
+
+func TestProjectConfigOverridesGlobalAndPins(t *testing.T) {
+	old, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	child := filepath.Join(root, "src")
+	if err := os.Mkdir(child, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".gh-skill-tui.toml"), []byte("source = \"project/private-skills\"\nbranch = \"release\"\nhash = \"deadbeef\"\ncheck-ignore-skill = [\"local-only\"]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(child); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chdir(old)
+		fileCfg = fileConfig{}
+		projectCfg = fileConfig{}
+		projectCfgPath = ""
+	})
+	fileCfg = fileConfig{Source: "global/private-skills", Ref: "main", Pin: "global-pin"}
+	if err := loadProjectConfig(root); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := parseArgs([]string{"check"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Command != "check" || cfg.Source != "project/private-skills" || cfg.Ref != "release" || cfg.Pin != "deadbeef" {
+		t.Fatalf("project config = %+v", cfg)
+	}
+	if len(cfg.CheckIgnoreSkills) != 1 || cfg.CheckIgnoreSkills[0] != "local-only" {
+		t.Fatalf("ignore config = %v", cfg.CheckIgnoreSkills)
+	}
+	cli, err := parseArgs([]string{"check", "--source", "cli/private-skills", "--ref", "cli", "--pin", "cli-pin"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cli.Source != "cli/private-skills" || cli.Ref != "cli" || cli.Pin != "cli-pin" {
+		t.Fatalf("CLI precedence = %+v", cli)
+	}
+}
+
+func TestBuildPlanAddsConfiguredPin(t *testing.T) {
+	cfg := config{Source: "Owner/Repo", Pin: "deadbeef"}
+	entries, _ := buildPlan(cfg, "gh", []string{"skills/demo/SKILL.md"}, allInstallTargets(), map[string]bool{"codex": true}, "project", false, "/proj", "", nil, nil, nil)
+	if len(entries) != 1 || !containsStr(entries[0].Args, "--pin") || !containsStr(entries[0].Args, "deadbeef") {
+		t.Fatalf("configured pin missing: %+v", entries)
 	}
 }

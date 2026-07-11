@@ -474,10 +474,10 @@ func renderDiff(diff string, w int) []string {
 		return nil
 	}
 	var out []string
-	if fileCfg.DiffCommand != "" {
+	if diffCommand := activeFileConfig().DiffCommand; diffCommand != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
-		cmd := exec.CommandContext(ctx, "sh", "-c", fileCfg.DiffCommand)
+		cmd := exec.CommandContext(ctx, "sh", "-c", diffCommand)
 		cmd.Stdin = strings.NewReader(diff + "\n")
 		cmd.Env = append(os.Environ(), fmt.Sprintf("COLUMNS=%d", w))
 		// detach from the terminal: tools like delta query the tty for

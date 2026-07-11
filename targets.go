@@ -39,8 +39,9 @@ func builtinInstallTargets() []installTarget {
 func defaultSelectedAgents() map[string]bool {
 	marked := make(map[string]bool)
 	fallback := "claude-code,codex,opencode,kimi"
-	if len(fileCfg.DefaultAgents) > 0 {
-		fallback = strings.Join(fileCfg.DefaultAgents, ",")
+	active := activeFileConfig()
+	if len(active.DefaultAgents) > 0 {
+		fallback = strings.Join(active.DefaultAgents, ",")
 	}
 	names := envDefault("GH_SKILL_DEFAULT_AGENTS", fallback)
 	valid := make(map[string]bool)
@@ -78,9 +79,10 @@ func localSkillArg(path string) string {
 // allowedSources returns the OWNER/REPO slugs skills may come from
 // (supply-chain policy). Local directory sources are always allowed.
 func allowedSources() []string {
-	fallback := envDefault("GH_SKILL_DEFAULT_SOURCE", firstNonEmpty(fileCfg.Source, defaultSource))
-	if len(fileCfg.AllowedSources) > 0 {
-		fallback = strings.Join(fileCfg.AllowedSources, ",")
+	active := activeFileConfig()
+	fallback := envDefault("GH_SKILL_DEFAULT_SOURCE", firstNonEmpty(active.Source, defaultSource))
+	if len(active.AllowedSources) > 0 {
+		fallback = strings.Join(active.AllowedSources, ",")
 	}
 	raw := envDefault("GH_SKILL_ALLOWED_SOURCES", fallback)
 	var out []string
@@ -143,6 +145,9 @@ func buildPlan(cfg config, gh string, paths []string, targets []installTarget, m
 	finish := func(args []string, f bool) []string {
 		if f {
 			args = append(args, "--force")
+		}
+		if cfg.Pin != "" && !hasInstallPin(args) && !hasInstallPin(cfg.InstallArgs) {
+			args = append(args, "--pin", cfg.Pin)
 		}
 		return append(args, cfg.InstallArgs...)
 	}
@@ -246,4 +251,16 @@ func buildPlan(cfg config, gh string, paths []string, targets []installTarget, m
 		}
 	}
 	return entries, skipped
+}
+
+func hasInstallPin(args []string) bool {
+	for i, arg := range args {
+		if arg == "--pin" && i+1 < len(args) {
+			return true
+		}
+		if strings.HasPrefix(arg, "--pin=") {
+			return true
+		}
+	}
+	return false
 }
