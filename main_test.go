@@ -1206,8 +1206,7 @@ func TestViewUsesStableViewportSize(t *testing.T) {
 	}
 	local := localOnlyModel(t)
 	states = append(states,
-		press(t, local, "1", "G"),      // cursor on the outside row
-		press(t, local, "1", "G", "P"), // destination picker open
+		press(t, local, "1", "G"), // cursor on the outside row
 	)
 	for i, s := range states {
 		view := s.View()
@@ -1642,56 +1641,8 @@ func TestOutsidePRNeverFallsBackAcrossMultipleCopies(t *testing.T) {
 	if !m.confirmMode || m.prPlan == nil || len(m.planBlocks) != 0 {
 		t.Fatalf("explicit outside plan = %+v blocks=%v", m.prPlan, m.planBlocks)
 	}
-	if got := m.prPlan.Files["skills/share/same-name/SKILL.md"]; !strings.Contains(got, "CLAUDE") {
+	if got := m.prPlan.Files["skills/same-name/SKILL.md"]; !strings.Contains(got, "CLAUDE") {
 		t.Fatalf("wrong copy selected: %q", got)
-	}
-}
-
-func TestPKeyOpensAddPickerAndBuildsPlan(t *testing.T) {
-	m := localOnlyModel(t)
-	m = press(t, m, "1", "G", "P")
-	if m.addPick == nil {
-		t.Fatalf("P did not open the picker: %q", m.status)
-	}
-	if strings.Join(m.addPick.Dirs, "|") != "|skills/share|skills/tools" {
-		t.Fatalf("candidate dirs = %v", m.addPick.Dirs)
-	}
-	// esc cancels
-	if m2 := press(t, m, "esc"); m2.addPick != nil {
-		t.Fatal("esc must cancel the picker")
-	}
-	// choose skills/share, keep the default name
-	m = press(t, m, "j", "enter")
-	if m.addPick.Stage != 1 || m.addPick.Dir != "skills/share" || m.addPick.NameInput != "my-skill" {
-		t.Fatalf("picker after dir choice = %+v", m.addPick)
-	}
-	m = press(t, m, "enter")
-	if !m.confirmMode || m.prPlan == nil || m.addPick != nil {
-		t.Fatalf("plan not built: %q", m.status)
-	}
-	p := m.prPlan
-	if len(p.DestDirs) != 1 || p.DestDirs[0] != "skills/share/my-skill" || !p.Remote || p.Repo != "Owner/Repo" {
-		t.Fatalf("plan = %+v", p)
-	}
-	// scope:project -> the PR source is the project copy (codex+kimi dir)
-	if got := p.Files["skills/share/my-skill/SKILL.md"]; got != "---\nname: my-skill\n---\n# PROJECT BODY\n" {
-		t.Fatalf("SKILL.md content = %q", got)
-	}
-	if strings.Join(p.Changed, "|") != "A skills/share/my-skill/SKILL.md" {
-		t.Fatalf("changed = %v", p.Changed)
-	}
-	if p.CopyAgents != "codex+kimi" {
-		t.Fatalf("copy agents = %q", p.CopyAgents)
-	}
-	if len(p.Deletes) != 0 || p.Outdated {
-		t.Fatalf("add plan must have no deletes/outdated: %+v", p)
-	}
-	if !strings.HasPrefix(p.Branch, "gh-skill-tui/add-my-skill-") {
-		t.Fatalf("branch = %q", p.Branch)
-	}
-	m = press(t, m, "enter")
-	if !m.running || m.accepted {
-		t.Fatalf("enter must start the PR in the background: running=%v accepted=%v", m.running, m.accepted)
 	}
 }
 
@@ -1729,13 +1680,13 @@ func TestLowercasePBatchesMarkedLocalSkills(t *testing.T) {
 		t.Fatalf("p did not build a batch plan: %q", m.status)
 	}
 	p := m.prPlan
-	if strings.Join(p.DestDirs, "|") != "skills/share/my-skill|skills/share/new_tool" {
+	if strings.Join(p.DestDirs, "|") != "skills/my-skill|skills/share/new_tool" {
 		t.Fatalf("dests = %v", p.DestDirs)
 	}
 	if !strings.HasPrefix(p.Branch, "gh-skill-tui/add-2-skills-") {
 		t.Fatalf("branch = %q", p.Branch)
 	}
-	if _, ok := p.Files["skills/share/my-skill/SKILL.md"]; !ok {
+	if _, ok := p.Files["skills/my-skill/SKILL.md"]; !ok {
 		t.Fatalf("files = %v", p.Files)
 	}
 	if _, ok := p.Files["skills/share/new_tool/SKILL.md"]; !ok {
@@ -1779,18 +1730,18 @@ func TestPRPlanCombinesEditedAndOutsideSelections(t *testing.T) {
 	}
 	p := m.prPlan
 	if strings.Join(p.SourceDirs, "|") != "skills/share/memoc-create" ||
-		strings.Join(p.DestDirs, "|") != "skills/share/new-local" {
+		strings.Join(p.DestDirs, "|") != "skills/new-local" {
 		t.Fatalf("source/dest dirs = %v / %v", p.SourceDirs, p.DestDirs)
 	}
 	if _, ok := p.Files["skills/share/memoc-create/SKILL.md"]; !ok {
 		t.Fatalf("edited file missing: %v", p.Files)
 	}
-	if got := p.Files["skills/share/new-local/SKILL.md"]; !strings.Contains(got, "# NEW") {
+	if got := p.Files["skills/new-local/SKILL.md"]; !strings.Contains(got, "# NEW") {
 		t.Fatalf("outside file = %q", got)
 	}
 	changed := strings.Join(p.Changed, "|")
 	if !strings.Contains(changed, "M skills/share/memoc-create/SKILL.md") ||
-		!strings.Contains(changed, "A skills/share/new-local/SKILL.md") {
+		!strings.Contains(changed, "A skills/new-local/SKILL.md") {
 		t.Fatalf("changed = %v", p.Changed)
 	}
 	if !strings.HasPrefix(p.Branch, "gh-skill-tui/propose-2-skills-") {
@@ -1893,60 +1844,24 @@ func TestAutoDestDir(t *testing.T) {
 	dest := func(inst installedSkill) (string, error) {
 		return m.autoDestDir(localCopy{Scope: "project", Agents: []string{"claude"}, Inst: inst})
 	}
-	// 1. tracked path wins when free
+	// 1. a namespaced installed path is mirrored below skills/
 	if d, err := dest(installedSkill{Name: "sakuramoti/port_model", GhPath: "skills/sakuramoti/port_model"}); err != nil || d != "skills/sakuramoti/port_model" {
-		t.Fatalf("ghpath rule: %q %v", d, err)
+		t.Fatalf("tree mirror: %q %v", d, err)
 	}
-	// 2. namespace match against a source parent dir
+	// 2. another nested path gets the same relative layout
 	if d, err := dest(installedSkill{Name: "share/new_tool"}); err != nil || d != "skills/share/new_tool" {
-		t.Fatalf("namespace rule: %q %v", d, err)
+		t.Fatalf("nested tree mirror: %q %v", d, err)
 	}
-	// 4. plain names fall back to the "share" parent
-	if d, err := dest(installedSkill{Name: "plain-skill"}); err != nil || d != "skills/share/plain-skill" {
-		t.Fatalf("share fallback: %q %v", d, err)
-	}
-	// 3. new_skill_dir config overrides the share fallback
-	fileCfg.NewSkillDir = "custom/place"
-	t.Cleanup(func() { fileCfg = fileConfig{} })
-	if d, err := dest(installedSkill{Name: "plain-skill"}); err != nil || d != "custom/place/plain-skill" {
-		t.Fatalf("config rule: %q %v", d, err)
+	// 3. plain names are mirrored under the source's skills/ root
+	if d, err := dest(installedSkill{Name: "plain-skill"}); err != nil || d != "skills/plain-skill" {
+		t.Fatalf("tree mirror: %q %v", d, err)
 	}
 	// collisions are an error, not a silent overwrite
-	fileCfg.NewSkillDir = "skills/share"
-	if _, err := dest(installedSkill{Name: "memoc-create"}); err == nil {
+	if _, err := dest(installedSkill{Name: "share/memoc-create"}); err == nil {
 		t.Fatal("collision must error")
 	}
-}
-
-func TestAddPickerDirectInputAndCollision(t *testing.T) {
-	m := localOnlyModel(t)
-	m = press(t, m, "1", "G", "P", "G", "enter") // G selects the direct-input row
-	if m.addPick == nil || !m.addPick.Direct {
-		t.Fatalf("direct input not active: %+v", m.addPick)
-	}
-	for _, r := range "custom/dir" {
-		m = press(t, m, string(r))
-	}
-	m = press(t, m, "enter")
-	if m.addPick.Stage != 1 || m.addPick.Dir != "custom/dir" {
-		t.Fatalf("picker after direct input = %+v", m.addPick)
-	}
-	// empty name is rejected
-	m = press(t, m, "ctrl+u", "enter")
-	if m.addPick == nil || m.confirmMode || !strings.Contains(m.status, "invalid skill name") {
-		t.Fatalf("empty name not rejected: %q", m.status)
-	}
-	// a destination colliding with an existing source skill keeps the picker open
-	m.addPick.Dir = "skills/share"
-	for _, r := range "memoc-create" {
-		m = press(t, m, string(r))
-	}
-	m = press(t, m, "enter")
-	if m.addPick == nil || m.confirmMode {
-		t.Fatal("collision must keep the picker open")
-	}
-	if !strings.Contains(m.status, "already exists") {
-		t.Fatalf("status = %q", m.status)
+	if _, err := dest(installedSkill{Name: "../escape"}); err == nil {
+		t.Fatal("path traversal must error")
 	}
 }
 

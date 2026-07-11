@@ -158,7 +158,6 @@ type model struct {
 	prPlan      *prPlan
 	running     bool // an operation owns the terminal through tea.Exec
 	result      *executionResult
-	addPick     *addPick // destination picker for outside skills; nil when inactive
 	mainScroll  int
 
 	width    int
@@ -558,9 +557,6 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.confirmMode {
 		return m.handleConfirmKey(key)
 	}
-	if m.addPick != nil {
-		return m.handleAddPickKey(msg)
-	}
 	if m.searchMode {
 		return m.handleSearchKey(msg)
 	}
@@ -625,23 +621,6 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "p":
 		if m.running {
 			m.status = "an operation is already running"
-			return m, nil
-		}
-		return m.openPRPlan()
-	case "P":
-		if m.running {
-			m.status = "an operation is already running"
-			return m, nil
-		}
-		if lo, ok := m.currentLocalOnly(); ok {
-			cp, errMsg := m.resolveOutsideCopy(lo)
-			if errMsg != "" {
-				m.status = errMsg
-				return m, nil
-			}
-			m.addPick = newAddPick(lo, cp, m.skills)
-			m.mainScroll = 0
-			m.status = "choose destination directory in the source"
 			return m, nil
 		}
 		return m.openPRPlan()
@@ -736,98 +715,6 @@ func (m model) handleSearchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.query += string(msg.Runes)
 		m.refreshVisible()
 		return m, m.ensurePreviewCmd()
-	}
-	return m, nil
-}
-
-// handleAddPickKey drives the destination picker for importing an outside
-// skill to the source: stage 0 chooses the parent dir (list or direct
-// input), stage 1 edits the skill name, enter builds the add-PR plan.
-func (m model) handleAddPickKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	ap := m.addPick
-	key := msg.String()
-	if ap.Stage == 0 && !ap.Direct {
-		last := len(ap.Dirs) // index of the "(direct input…)" row
-		switch key {
-		case "esc", "q", "ctrl+[":
-			m.addPick = nil
-			m.status = "add cancelled"
-		case "j", "down":
-			ap.Cursor = min(last, ap.Cursor+1)
-		case "k", "up":
-			ap.Cursor = max(0, ap.Cursor-1)
-		case "g", "home":
-			ap.Cursor = 0
-		case "G", "end":
-			ap.Cursor = last
-		case "enter":
-			if ap.Cursor == last {
-				ap.Direct = true
-				ap.DirInput = ""
-				return m, nil
-			}
-			ap.Dir = ap.Dirs[ap.Cursor]
-			ap.Stage = 1
-			ap.NameInput = path.Base(ap.Local.Name)
-		}
-		return m, nil
-	}
-	// text stages: stage-0 direct dir input, stage-1 name edit
-	input := &ap.NameInput
-	if ap.Stage == 0 {
-		input = &ap.DirInput
-	}
-	switch key {
-	case "esc", "ctrl+[":
-		if ap.Stage == 0 {
-			ap.Direct = false
-		} else {
-			ap.Stage = 0
-		}
-		return m, nil
-	case "backspace", "ctrl+h":
-		if *input != "" {
-			runes := []rune(*input)
-			*input = string(runes[:len(runes)-1])
-		}
-		return m, nil
-	case "ctrl+u":
-		*input = ""
-		return m, nil
-	case "enter":
-		if ap.Stage == 0 {
-			dir, err := cleanDestDirInput(ap.DirInput)
-			if err != nil {
-				m.status = err.Error()
-				return m, nil
-			}
-			ap.Dir = dir
-			ap.Stage = 1
-			ap.NameInput = path.Base(ap.Local.Name)
-			return m, nil
-		}
-		name := strings.TrimSpace(ap.NameInput)
-		if !validSkillName(name) {
-			m.status = "invalid skill name (letters, digits, . _ - only)"
-			return m, nil
-		}
-		destDir := path.Join(ap.Dir, name)
-		if m.sourceHasSkillDir(destDir) {
-			m.status = "already exists in source: " + destDir
-			return m, nil
-		}
-		plan, errMsg := m.buildAddPRPlan(ap.Copy, destDir)
-		if plan == nil {
-			m.status = errMsg
-			return m, nil
-		}
-		m.prPlan = plan
-		m.addPick = nil
-		m.beginPlan(opPR, nil, nil)
-		return m, nil
-	}
-	if msg.Type == tea.KeyRunes {
-		*input += string(msg.Runes)
 	}
 	return m, nil
 }
@@ -1707,19 +1594,6 @@ func (m model) statusLine(width int) string {
 		}
 		return padRendered(searchStyle.Render(fitText(msg, width)), width)
 	}
-	if m.addPick != nil {
-		ap := m.addPick
-		var msg string
-		switch {
-		case ap.Stage == 0 && !ap.Direct:
-			msg = "add to source: j/k choose dir, enter: next, esc: cancel"
-		case ap.Stage == 0:
-			msg = "dir: " + ap.DirInput + "_  (enter: next, esc: back to list)"
-		default:
-			msg = "name: " + ap.NameInput + "_  (enter: build PR, esc: back)"
-		}
-		return padRendered(searchStyle.Render(fitText(msg, width)), width)
-	}
 	state := fmt.Sprintf("scope:%s force:%s  selected: source %d / outside %d", m.scope, onOff(m.force), len(m.selectedPaths()), len(m.selectedOutside()))
 	if m.query != "" {
 		state += "  search:" + m.query
@@ -2009,7 +1883,7 @@ func (m model) agentMark(p installTarget) string {
 // plan spell out the destructive operation.
 func (m *model) toggleForceMark() {
 	if _, ok := m.currentLocalOnly(); ok {
-		m.status = "outside skill: p proposes an import PR (P picks the destination)"
+		m.status = "outside skill: p proposes an import PR at the matching source path"
 		return
 	}
 	if m.cliOverride {
@@ -2134,7 +2008,7 @@ func (m model) installedCopyOutside(inst installedSkill) bool {
 }
 
 func (m model) boxify(area focusArea, title string, w, contentH int, rows []prow) []string {
-	focused := m.focus == area && !m.confirmMode && m.addPick == nil
+	focused := m.focus == area && !m.confirmMode
 	lines := []string{boxTop(title, w, focused)}
 	cursor := m.cursors[area]
 	off := listOffset(cursor, len(rows), contentH)
@@ -2160,10 +2034,10 @@ func (m model) boxify(area focusArea, title string, w, contentH int, rows []prow
 
 func (m model) renderMainPanel(w, h int) []string {
 	title, body := m.mainContent(w - 2)
-	if !m.confirmMode && m.addPick == nil {
+	if !m.confirmMode {
 		title = "4 " + title
 	}
-	focused := m.confirmMode || m.addPick != nil || m.focus == focusMain
+	focused := m.confirmMode || m.focus == focusMain
 	lines := []string{boxTop(title, w, focused)}
 	contentH := h - 2
 	cw := w - 2
@@ -2198,9 +2072,6 @@ func (m model) detailArea() focusArea {
 func (m model) mainContent(w int) (string, []string) {
 	if m.result != nil {
 		return m.resultContent(w)
-	}
-	if m.addPick != nil {
-		return m.addPickContent(w)
 	}
 	if m.confirmMode {
 		return m.confirmContent(w)
@@ -2344,54 +2215,6 @@ func (m model) confirmContent(w int) (string, []string) {
 	}
 	lines = append(lines, "", warnStyle.Render("enter/y: run  esc: cancel"))
 	return title, lines
-}
-
-// addPickContent renders the destination picker for importing an outside
-// skill to the source repository.
-func (m model) addPickContent(w int) (string, []string) {
-	ap := m.addPick
-	dirLabel := func(d string) string {
-		if d == "" {
-			return "(repo root)"
-		}
-		return d + "/"
-	}
-	lines := []string{
-		"skill:  " + ap.Local.Name,
-		"from:   " + homeShorten(ap.Copy.Inst.Dir) + " (" + strings.Join(ap.Copy.Agents, "+") + ", " + ap.Copy.Scope + " scope)",
-		"",
-	}
-	if ap.Stage == 0 {
-		lines = append(lines, "destination directory in "+m.cfg.Source+":", "")
-		row := func(i int, label string) string {
-			if !ap.Direct && i == ap.Cursor {
-				return "→ " + warnStyle.Render(label)
-			}
-			return "  " + label
-		}
-		for i, d := range ap.Dirs {
-			lines = append(lines, row(i, dirLabel(d)))
-		}
-		lines = append(lines, row(len(ap.Dirs), "(direct input…)"))
-		if ap.Direct {
-			lines = append(lines, "", searchStyle.Render("dir: "+ap.DirInput+"_"))
-		}
-		lines = append(lines, "", warnStyle.Render("enter: next (skill name)  esc: cancel"))
-		return "add to source (1/2): destination dir", lines
-	}
-	name := strings.TrimSpace(ap.NameInput)
-	dest := path.Join(ap.Dir, name)
-	lines = append(lines,
-		"destination: "+dirLabel(ap.Dir),
-		searchStyle.Render("name: "+ap.NameInput+"_"),
-		"",
-		"creates: "+dest+"/",
-	)
-	if name != "" && m.sourceHasSkillDir(dest) {
-		lines = append(lines, errorStyle.Render("⚠ already exists in the source"))
-	}
-	lines = append(lines, "", warnStyle.Render("enter: build PR plan  esc: back"))
-	return "add to source (2/2): skill name", lines
 }
 
 func (m model) treeDetail(w int) (string, []string) {
@@ -2588,7 +2411,7 @@ func (m model) agentDetail(w int) (string, []string) {
 		for _, rel := range rels {
 			lines = append(lines, "  "+rel)
 		}
-		lines = append(lines, "", warnStyle.Render("p proposes an import PR; P picks the destination first"))
+		lines = append(lines, "", warnStyle.Render("p proposes an import PR at the matching source path"))
 		lines = append(lines, "")
 		lines = append(lines, classLegend()...)
 		return lo.Name + " (outside)", lines

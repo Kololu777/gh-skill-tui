@@ -35,11 +35,6 @@ type fileConfig struct {
 	// (e.g. "delta --color-only --paging=never"); its ANSI output is
 	// rendered as-is. Empty uses the built-in colorizer.
 	DiffCommand string `toml:"diff_command"`
-	// NewSkillDir is where p places outside-source skills in the source when
-	// no better destination can be inferred (e.g. "skills/share"). Empty
-	// falls back to a source dir named "share".
-	NewSkillDir string `toml:"new_skill_dir"`
-
 	// Agents is the public name. Providers remains a deprecated input alias
 	// so existing config files continue to work during the terminology change.
 	Agents          []agentConfig `toml:"agents"`
@@ -254,9 +249,6 @@ func activeFileConfig() fileConfig {
 	}
 	if p.DiffCommand != "" {
 		out.DiffCommand = p.DiffCommand
-	}
-	if p.NewSkillDir != "" {
-		out.NewSkillDir = p.NewSkillDir
 	}
 	if len(p.Agents) > 0 {
 		out.Agents = p.Agents

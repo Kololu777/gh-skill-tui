@@ -675,15 +675,6 @@
               <td data-col="4"><div class="cell is-risk"><span class="tag tag-context">context</span><p>preview の元になった tab 1 行を使用。</p><small>ただし local-only mark があればそちらを優先。</small></div></td>
             </tr>
 
-            <tr data-search="P pr destination picker manual local-only modified uppercase">
-              <th scope="row"><div class="key-name"><kbd>P</kbd></div></th>
-              <td data-col="0"><div class="cell"><span class="tag tag-execute">global</span><p>現在行が local-only なら destination picker。</p><small>それ以外は現在 source 行の edit PR。</small></div></td>
-              <td data-col="1"><div class="cell"><span class="tag tag-execute">global</span><p>同左。</p><small>複数 local-only mark は使用しない。</small></div></td>
-              <td data-col="2"><div class="cell is-risk"><span class="tag tag-context">context</span><p>provider cursor の copy を優先。</p><small>存在しなければ別 provider へ fallback。</small></div></td>
-              <td data-col="3"><div class="cell"><span class="tag tag-context">context</span><p>installed cursor は無視して tab 1 の現在行。</p></div></td>
-              <td data-col="4"><div class="cell"><span class="tag tag-context">context</span><p>preview 元の tab 1 行を使用。</p></div></td>
-            </tr>
-
             <tr data-search="d delete provider bulk selected hidden context danger">
               <th scope="row"><div class="key-name"><kbd>d</kbd></div></th>
               <td data-col="0"><div class="cell is-risk"><span class="tag tag-danger">risk</span><p>source 選択全体の delete mode。</p><small>何も mark がなければ subtree ではなく tab 1 の現在行を使用。</small></div></td>
@@ -776,7 +767,7 @@
           <h3><kbd>p</kbd> automatic PR</h3>
           <ol class="steps">
             <li><strong><code>localMarked</code> があれば最優先</strong><span>現在 source 行や focus を上書きする。</span></li>
-            <li><strong>なければ現在 local-only 行</strong><span>destination を自動推定。</span></li>
+            <li><strong>なければ現在 local-only 行</strong><span>installed relative path を source の <code>skills/</code> 以下へ写像。</span></li>
             <li><strong>なければ現在 source 行</strong><span>edited copy がある場合だけ PR plan。</span></li>
             <li><strong>tab 2 focus なら provider cursor を優先</strong><span class="risk">copy がなければ別 provider へ fallback。</span></li>
             <li><strong><code>selected</code> source marks は無視</strong><span>source edit PR は batch されない。</span></li>
@@ -855,11 +846,6 @@
               <th scope="row">confirm</th>
               <td><kbd>enter</kbd>/<kbd>y</kbd> execute、<kbd>esc</kbd>/<kbd>q</kbd>/<kbd>n</kbd> cancel、<kbd>j</kbd>/<kbd>k</kbd> scroll</td>
               <td>tab 移動、mark、scope 切替などは無効。</td>
-            </tr>
-            <tr>
-              <th scope="row">destination picker</th>
-              <td><kbd>j</kbd>/<kbd>k</kbd>、<kbd>enter</kbd>、<kbd>esc</kbd>、文字入力</td>
-              <td><code>i</code>、<code>p</code> などは入力欄では通常文字になる。</td>
             </tr>
           </tbody>
         </table>
