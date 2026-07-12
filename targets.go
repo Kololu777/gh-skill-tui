@@ -80,7 +80,7 @@ func localSkillArg(path string) string {
 // (supply-chain policy). Local directory sources are always allowed.
 func allowedSources() []string {
 	active := activeFileConfig()
-	fallback := envDefault("GH_SKILL_DEFAULT_SOURCE", firstNonEmpty(active.Source, defaultSource))
+	fallback := envDefault("GH_SKILL_DEFAULT_SOURCE", active.Source)
 	if len(active.AllowedSources) > 0 {
 		fallback = strings.Join(active.AllowedSources, ",")
 	}

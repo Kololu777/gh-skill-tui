@@ -650,7 +650,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (m model) handleResultKey(key string) (tea.Model, tea.Cmd) {
 	switch key {
-	case "enter", "y":
+	case "enter":
 		m.result = nil
 		m.focus = m.detail
 		m.mainScroll = 0
@@ -721,7 +721,7 @@ func (m model) handleSearchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (m model) handleConfirmKey(key string) (tea.Model, tea.Cmd) {
 	switch key {
-	case "enter", "y":
+	case "enter":
 		if len(m.planBlocks) > 0 {
 			m.status = fmt.Sprintf("%s plan blocked by %d selected target(s)", strings.ToLower(m.planKind.String()), len(m.planBlocks))
 			return m, nil
@@ -1237,6 +1237,11 @@ func (m model) openPRPlan() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	plan, blocks := m.buildSelectedPRPlan(selected, outside)
+	if plan != nil {
+		if err := applyPRTemplate(m.cfg, m.projectRoot, plan); err != nil {
+			blocks = append(blocks, err.Error())
+		}
+	}
 	m.prPlan = plan
 	m.beginPlan(opPR, blocks, nil)
 	return m, nil
@@ -1590,7 +1595,7 @@ func (m model) statusLine(width int) string {
 		if len(m.planBlocks) > 0 {
 			msg += fmt.Sprintf(" BLOCKED (%d) — enter disabled  esc: back", len(m.planBlocks))
 		} else {
-			msg += " — enter/y: run  esc: cancel"
+			msg += " — enter: run  esc: cancel"
 		}
 		return padRendered(searchStyle.Render(fitText(msg, width)), width)
 	}
@@ -2213,7 +2218,7 @@ func (m model) confirmContent(w int) (string, []string) {
 		lines = append(lines, "", errorStyle.Render("Nothing will run. Esc returns to selection."))
 		return title, lines
 	}
-	lines = append(lines, "", warnStyle.Render("enter/y: run  esc: cancel"))
+	lines = append(lines, "", warnStyle.Render("enter: run  esc: cancel"))
 	return title, lines
 }
 

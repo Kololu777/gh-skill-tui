@@ -35,6 +35,10 @@ type fileConfig struct {
 	// (e.g. "delta --color-only --paging=never"); its ANSI output is
 	// rendered as-is. Empty uses the built-in colorizer.
 	DiffCommand string `toml:"diff_command"`
+	// PRTemplate is a path to a text file (Markdown, YAML, ...) used as the
+	// PR/MR body for p plans. Relative paths resolve against the project
+	// root. {{title}} and {{body}} embed the generated title and details.
+	PRTemplate string `toml:"pr_template"`
 	// Agents is the public name. Providers remains a deprecated input alias
 	// so existing config files continue to work during the terminology change.
 	Agents          []agentConfig `toml:"agents"`
@@ -43,7 +47,7 @@ type fileConfig struct {
 
 // checkFileConfig is accepted under [check] as well as at the project TOML
 // root. The root form keeps project files short, while the table form makes
-// it clear that ignore rules affect `gst check` only.
+// it clear that ignore rules affect `gh-skill-check` only.
 type checkFileConfig struct {
 	Source                  string   `toml:"source"`
 	Ref                     string   `toml:"ref"`
@@ -80,8 +84,8 @@ var projectCfgPath string
 var projectConfigNames = []string{
 	".gh-skill-tui.toml",
 	"gh-skill-tui.toml",
-	".gst.toml",
-	"gst.toml",
+	".gh-skill-check.toml",
+	"gh-skill-check.toml",
 }
 
 func defaultConfigPath() string {
@@ -127,7 +131,7 @@ func loadFileConfig(path string) error {
 
 // loadProjectConfig finds the nearest project-local TOML. A project file is
 // intentionally discovered from the current directory upward, so running
-// gst in a subdirectory still uses the repository's policy. The local file
+// gh-skill-check in a subdirectory still uses the repository's policy. The local file
 // wins over the user config, but CLI flags and environment variables retain
 // their normal higher precedence.
 func loadProjectConfig(root string) error {
@@ -177,8 +181,8 @@ func validateFileConfig(path string, cfg fileConfig) error {
 }
 
 // findProjectConfig returns the nearest supported project config. Multiple
-// names are accepted for a gentle migration from the short `gst` spelling to
-// the canonical `.gh-skill-tui.toml`; the first name in the list wins.
+// names are accepted for a gentle migration between the TUI and checker
+// spellings; the first name in the list wins.
 func findProjectConfig(root string) string {
 	start, err := os.Getwd()
 	if err != nil {
@@ -249,6 +253,9 @@ func activeFileConfig() fileConfig {
 	}
 	if p.DiffCommand != "" {
 		out.DiffCommand = p.DiffCommand
+	}
+	if p.PRTemplate != "" {
+		out.PRTemplate = p.PRTemplate
 	}
 	if len(p.Agents) > 0 {
 		out.Agents = p.Agents

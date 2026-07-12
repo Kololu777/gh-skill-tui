@@ -4,12 +4,17 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
+	"runtime/debug"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-const defaultSource = "Kololu777/private-skills"
+// version is stamped by release builds (-ldflags "-X main.version=...");
+// package.nix pins it to the Nix package version. Plain source builds stay
+// "dev" and report the VCS revision that go build embeds instead.
+var version = "dev"
 
 type config struct {
 	Source            string
@@ -21,13 +26,15 @@ type config struct {
 	DirArg            string
 	InstallArgs       []string
 	CheckIgnoreSkills []string
+	PRTemplate        string
 	Command           string
 	SelectOnly        bool
 	DryRun            bool
 }
 
 func main() {
-	if err := loadFileConfig(configPathFromArgs(os.Args[1:])); err != nil {
+	args := argsForProgram(os.Args[0], os.Args[1:])
+	if err := loadFileConfig(configPathFromArgs(args)); err != nil {
 		fmt.Fprintln(os.Stderr, "config error:", err)
 		os.Exit(2)
 	}
@@ -35,10 +42,14 @@ func main() {
 		fmt.Fprintln(os.Stderr, "project config error:", err)
 		os.Exit(2)
 	}
-	cfg, err := parseArgs(os.Args[1:])
+	cfg, err := parseArgs(args)
 	if err != nil {
 		if errors.Is(err, errHelp) {
 			printUsage(os.Stdout)
+			return
+		}
+		if errors.Is(err, errVersion) {
+			printVersion(os.Stdout)
 			return
 		}
 		fmt.Fprintln(os.Stderr, err)
@@ -76,17 +87,70 @@ func main() {
 	}
 }
 
+// argsForProgram gives the standalone checker a command-shaped argument
+// list. The Nix package installs gh-skill-check as a symlink to this binary;
+// checking os.Args[0] keeps the same behavior for local builds and go build
+// -o gh-skill-check as well.
+func argsForProgram(program string, args []string) []string {
+	if filepath.Base(program) != "gh-skill-check" {
+		return args
+	}
+	if len(args) > 0 && args[0] == "check" {
+		return args
+	}
+	out := make([]string, 0, len(args)+1)
+	out = append(out, "check")
+	out = append(out, args...)
+	return out
+}
+
 var errHelp = errors.New("help requested")
+var errVersion = errors.New("version requested")
+
+func printVersion(out *os.File) {
+	v := version
+	rev := ""
+	if info, ok := debug.ReadBuildInfo(); ok {
+		if v == "dev" && info.Main.Version != "" && info.Main.Version != "(devel)" {
+			v = info.Main.Version
+		}
+		modified := false
+		for _, s := range info.Settings {
+			switch s.Key {
+			case "vcs.revision":
+				rev = s.Value
+			case "vcs.modified":
+				modified = s.Value == "true"
+			}
+		}
+		if len(rev) > 12 {
+			rev = rev[:12]
+		}
+		if rev != "" && modified {
+			rev += "-dirty"
+		}
+	}
+	// A stamped or module version already identifies the build; only fall
+	// back to the bare VCS revision when nothing better is known.
+	line := "gh-skill-tui version " + v
+	if v == "dev" && rev != "" {
+		line += " (" + rev + ")"
+	}
+	if _, err := fmt.Fprintln(out, line); err != nil {
+		return
+	}
+}
 
 func parseArgs(args []string) (config, error) {
 	active := activeFileConfig()
 	cfg := config{
-		Source:            envDefault("GH_SKILL_DEFAULT_SOURCE", firstNonEmpty(active.Source, defaultSource)),
+		Source:            envDefault("GH_SKILL_DEFAULT_SOURCE", active.Source),
 		Ref:               firstNonEmpty(active.Branch, active.Ref),
 		Pin:               firstNonEmpty(active.Hash, active.Commit, active.Pin),
 		Scope:             envDefault("GH_SKILL_DEFAULT_SCOPE", firstNonEmpty(active.Scope, "project")),
 		Force:             active.Force,
 		CheckIgnoreSkills: checkIgnoreSkills(active),
+		PRTemplate:        active.PRTemplate,
 	}
 	sourceSet := false
 	commandSet := false
@@ -110,6 +174,8 @@ func parseArgs(args []string) (config, error) {
 		switch {
 		case arg == "-h" || arg == "--help":
 			return cfg, errHelp
+		case arg == "--version":
+			return cfg, errVersion
 		case arg == "--select":
 			cfg.SelectOnly = true
 		case arg == "--dry-run":
@@ -224,6 +290,9 @@ func parseArgs(args []string) (config, error) {
 	if cfg.Command == "check" {
 		cfg = applyCheckTableConfig(cfg, sourceSet, refSet, pinSet)
 	}
+	if cfg.Source == "" {
+		return cfg, errors.New("no source configured: pass OWNER/REPO (or a local skills dir), set source in config.toml / .gh-skill-tui.toml, or set GH_SKILL_DEFAULT_SOURCE")
+	}
 
 	return cfg, nil
 }
@@ -231,9 +300,13 @@ func parseArgs(args []string) (config, error) {
 func printUsage(out *os.File) {
 	lines := []string{
 		"usage: gh-skill-tui [--source OWNER/REPO|DIR] [--ref REF] [--scope project|user] [--agent AGENT]",
-		"                    [--dir DIR] [--force] [--config PATH] [--select] [--dry-run]",
+		"                    [--dir DIR] [--force] [--config PATH] [--select] [--dry-run] [--version]",
 		"                    [OWNER/REPO|DIR] [gh skill install flags...]",
-		"       gh-skill-tui check [--source OWNER/REPO|DIR] [--ref REF] [--pin HASH]",
+		"       gh-skill-check [--source OWNER/REPO|DIR] [--ref REF] [--pin HASH]",
+		"       gh-skill-tui check [--source OWNER/REPO|DIR] [--ref REF] [--pin HASH] (compatibility)",
+		"",
+		"a skills source is required: positional OWNER/REPO|DIR, --source, the config",
+		"        file source, or GH_SKILL_DEFAULT_SOURCE",
 		"",
 		"panels: 0 tree  1 skills  2 agents  3 installed  4 preview",
 		"keys:   0-4/h/l focus panel  j/k move  space select  enter detail/confirm",
@@ -241,11 +314,12 @@ func printUsage(out *os.File) {
 		"        u scope  f overwrite override  s search  r rescan  q back/quit",
 		"",
 		"config: ~/.config/gh-skill-tui/config.toml (or --config PATH)",
-		"        project-local .gh-skill-tui.toml (aliases: gh-skill-tui.toml, .gst.toml, gst.toml)",
+		"        project-local .gh-skill-tui.toml (aliases: gh-skill-tui.toml, .gh-skill-check.toml, gh-skill-check.toml)",
 		"        branch/ref and hash/commit/pin may pin a project to one source revision",
-		"        check_ignore_skills (or [check].ignore_skills) exempts outside skills",
+		"        check_ignore_skills (or [check].ignore_skills) exempts skills from gh-skill-check",
 		"        source, scope, force, default_agents, allowed_sources, allowed_local_roots,",
 		"        diff_command (e.g. \"delta --color-only --paging=never\"), [[agents]]",
+		"        pr_template (path; {{title}}/{{body}} placeholders) shapes p-plan PR/MR bodies",
 		"        legacy [[providers]] is still accepted as a compatibility alias",
 		"env (overrides config): GH_SKILL_DEFAULT_SOURCE, GH_SKILL_DEFAULT_AGENTS,",
 		"        GH_SKILL_DEFAULT_SCOPE, GH_SKILL_ALLOWED_SOURCES, GH_SKILL_ALLOWED_LOCAL_ROOTS",

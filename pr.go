@@ -37,6 +37,32 @@ type prPlan struct {
 	Outdated   bool
 }
 
+// applyPRTemplate replaces the generated PR/MR body with the configured
+// pr_template file. {{body}} embeds the generated details and {{title}} the
+// title; a template without {{body}} gets the details appended so the
+// provenance the TUI collected is never silently dropped.
+func applyPRTemplate(cfg config, projectRoot string, plan *prPlan) error {
+	if cfg.PRTemplate == "" {
+		return nil
+	}
+	path := expandHome(cfg.PRTemplate)
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(projectRoot, path)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("pr_template: %v", err)
+	}
+	text := strings.ReplaceAll(string(data), "{{title}}", plan.Title)
+	if strings.Contains(text, "{{body}}") {
+		text = strings.ReplaceAll(text, "{{body}}", plan.Body)
+	} else {
+		text = strings.TrimRight(text, "\n") + "\n\n" + plan.Body
+	}
+	plan.Body = text
+	return nil
+}
+
 // buildPRPlan picks the locally edited copy of the cursor skill (the cursor
 // agent when the agents panel is focused, otherwise the first agent with
 // local edits) and turns it into a branch/PR plan.

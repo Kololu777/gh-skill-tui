@@ -1,5 +1,5 @@
-name: バグ報告
-description: 再現可能な不具合を報告する
+name: Bug report
+description: Report a reproducible problem
 title: "[Bug]: "
 labels:
   - bug
@@ -7,24 +7,24 @@ body:
   - type: markdown
     attributes:
       value: |
-        報告ありがとうございます。再現手順と環境情報をできるだけ具体的に記載してください。
+        Thanks for the report. Please describe the reproduction steps and your environment as concretely as possible.
 
   - type: textarea
     id: description
     attributes:
-      label: 不具合の概要
-      description: 何が起きたか、期待していた動作は何かを記載してください。
+      label: Summary
+      description: Describe what happened and what you expected to happen.
       placeholder: |
-        期待する動作:
-        実際の動作:
+        Expected behavior:
+        Actual behavior:
     validations:
       required: true
 
   - type: textarea
     id: reproduction
     attributes:
-      label: 再現手順
-      description: 最小限の再現手順やコマンドを記載してください。
+      label: Steps to reproduce
+      description: Provide minimal reproduction steps or commands.
       placeholder: |
         1. ...
         2. ...
@@ -35,7 +35,7 @@ body:
   - type: input
     id: version
     attributes:
-      label: バージョンまたはコミット
+      label: Version or commit
       placeholder: v0.1.0 / abc1234
     validations:
       required: true
@@ -43,8 +43,8 @@ body:
   - type: textarea
     id: environment
     attributes:
-      label: 実行環境
-      description: OS、Go、gh、利用している agent などを記載してください。
+      label: Environment
+      description: OS, Go, gh, and the agents you use.
       placeholder: |
         OS: Ubuntu 24.04
         Go: 1.22.x
@@ -56,6 +56,6 @@ body:
   - type: textarea
     id: logs
     attributes:
-      label: ログやスクリーンショット
-      description: 秘密情報を削除して貼り付けてください。
+      label: Logs or screenshots
+      description: Paste them after removing any secrets.
       render: shell
