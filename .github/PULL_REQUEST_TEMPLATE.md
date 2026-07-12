@@ -1,18 +1,18 @@
-## 概要
+## Summary
 
-<!-- 変更の目的と内容を簡潔に記載してください。 -->
+<!-- Briefly describe the purpose and content of this change. -->
 
-## 変更内容
+## Changes
 
 -
 
-## 確認項目
+## Checklist
 
 - [ ] `make format-check`
 - [ ] `make lint`
 - [ ] `make test`
-- [ ] 必要に応じて README や Issue / PR template を更新した
+- [ ] Updated README or issue / PR templates if needed
 
-## 補足
+## Notes
 
-<!-- 互換性、既知の制限、レビューで見てほしい点などがあれば記載してください。 -->
+<!-- Compatibility notes, known limitations, points you want reviewers to focus on, and so on. -->

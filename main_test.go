@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -68,6 +69,21 @@ func TestParseArgsExtractsAgentFlags(t *testing.T) {
 
 	if _, err := parseArgs([]string{"--scope", "global"}); err == nil {
 		t.Fatal("invalid scope should error")
+	}
+}
+
+func TestArgsForProgram(t *testing.T) {
+	joined := func(args []string) string { return strings.Join(args, "\x00") }
+
+	if got := argsForProgram("/nix/store/example/bin/gh-skill-check", []string{"--source", "Owner/Repo"}); joined(got) != "check\x00--source\x00Owner/Repo" {
+		t.Fatalf("standalone checker args = %q", joined(got))
+	}
+	if got := argsForProgram("gh-skill-check", []string{"check", "--source", "Owner/Repo"}); joined(got) != "check\x00--source\x00Owner/Repo" {
+		t.Fatalf("explicit check args = %q", joined(got))
+	}
+	original := []string{"--source", "Owner/Repo"}
+	if got := argsForProgram("gh-skill-tui", original); joined(got) != joined(original) {
+		t.Fatalf("TUI args changed = %q", joined(got))
 	}
 }
 
@@ -2070,6 +2086,108 @@ func TestSkillCheckIgnoreOutsideSkill(t *testing.T) {
 	}
 	if len(good.Issues) != 0 || good.Ignored != 1 {
 		t.Fatalf("ignored check = %+v", good)
+	}
+}
+
+func TestSkillCheckIgnoreOutdatedManagedSkill(t *testing.T) {
+	fileCfg = fileConfig{}
+	projectCfg = fileConfig{}
+	projectCfgPath = ""
+	t.Cleanup(func() {
+		fileCfg = fileConfig{}
+		projectCfg = fileConfig{}
+		projectCfgPath = ""
+	})
+	source := makeCheckSource(t, "old")
+	project := t.TempDir()
+	_, _, trees, _, err := loadSkills(config{Source: source})
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldTree := trees[filepath.Join(source, "skills", "demo")]
+	writeLocalInstalledSkill(t, project, source, "old", oldTree)
+
+	path := filepath.Join(source, "skills", "demo", "SKILL.md")
+	if err := os.WriteFile(path, []byte("---\nname: demo\n---\nnew\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := runGit(source, "add", "skills/demo/SKILL.md"); err != nil {
+		t.Fatalf("git add: %v %s", err, out)
+	}
+	if out, err := runGit(source, "commit", "-qm", "update"); err != nil {
+		t.Fatalf("git commit: %v %s", err, out)
+	}
+
+	report, err := runSkillCheck(config{Source: source, Scope: "project", CheckIgnoreSkills: []string{"demo"}}, project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(report.Issues) != 0 || report.Ignored != 1 || report.Checked != 0 {
+		t.Fatalf("ignored managed check = %+v", report)
+	}
+}
+
+func TestParseArgsVersionFlag(t *testing.T) {
+	if _, err := parseArgs([]string{"--version"}); !errors.Is(err, errVersion) {
+		t.Fatalf("err = %v", err)
+	}
+	// gh-skill-check --version arrives as ["check", "--version"]
+	if _, err := parseArgs([]string{"check", "--version"}); !errors.Is(err, errVersion) {
+		t.Fatalf("check err = %v", err)
+	}
+}
+
+func TestParseArgsRequiresSource(t *testing.T) {
+	fileCfg = fileConfig{}
+	projectCfg = fileConfig{}
+	projectCfgPath = ""
+	t.Cleanup(func() {
+		fileCfg = fileConfig{}
+		projectCfg = fileConfig{}
+		projectCfgPath = ""
+	})
+	t.Setenv("GH_SKILL_DEFAULT_SOURCE", "")
+	if _, err := parseArgs(nil); err == nil {
+		t.Fatal("expected error when no source is configured")
+	}
+	cfg, err := parseArgs([]string{"Owner/Repo"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Source != "Owner/Repo" {
+		t.Fatalf("cfg = %+v", cfg)
+	}
+}
+
+func TestApplyPRTemplate(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "template.md")
+	if err := os.WriteFile(path, []byte("## Summary\n{{title}}\n\n## Details\n{{body}}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	plan := prPlan{Title: "skill: demo", Body: "- source skill: `skills/demo`"}
+	if err := applyPRTemplate(config{PRTemplate: "template.md"}, root, &plan); err != nil {
+		t.Fatal(err)
+	}
+	want := "## Summary\nskill: demo\n\n## Details\n- source skill: `skills/demo`\n"
+	if plan.Body != want {
+		t.Fatalf("templated body = %q", plan.Body)
+	}
+
+	if err := os.WriteFile(path, []byte("checklist\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	appended := prPlan{Title: "t", Body: "details"}
+	if err := applyPRTemplate(config{PRTemplate: path}, root, &appended); err != nil {
+		t.Fatal(err)
+	}
+	if appended.Body != "checklist\n\ndetails" {
+		t.Fatalf("appended body = %q", appended.Body)
+	}
+
+	missing := prPlan{Title: "t", Body: "details"}
+	if err := applyPRTemplate(config{PRTemplate: filepath.Join(root, "absent.md")}, root, &missing); err == nil {
+		t.Fatal("expected error for missing template")
 	}
 }
 

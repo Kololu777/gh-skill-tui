@@ -114,13 +114,15 @@ func runSkillCheck(cfg config, projectRoot string) (checkReport, error) {
 		}
 		for _, installed := range target.Skills {
 			location := target.Display + "/" + installed.Name
+			// Ignore patterns apply to every class of copy: outdated or
+			// locally modified managed skills as well as outside skills.
+			if ignoredCheckSkill(installed, patterns) {
+				report.Ignored++
+				continue
+			}
 			if belongsToConfiguredSource(installed, cfg.Source, sourceRoot) {
 				report.Checked++
 				checkManagedCopy(&report, checker, installed, location, expected, sourceLocal, sourceRoot)
-				continue
-			}
-			if ignoredCheckSkill(installed, patterns) {
-				report.Ignored++
 				continue
 			}
 			report.Issues = append(report.Issues, checkIssue{
@@ -286,10 +288,10 @@ func renderCheckReport(out io.Writer, report checkReport) error {
 		ref = report.Branch + " @ " + report.Revision
 	}
 	if report.ConfigPath != "" {
-		if _, err := fmt.Fprintf(out, "gst check: source=%s ref=%s scope=%s config=%s\n", report.Source, ref, report.Scope, homeShorten(report.ConfigPath)); err != nil {
+		if _, err := fmt.Fprintf(out, "gh-skill-check: source=%s ref=%s scope=%s config=%s\n", report.Source, ref, report.Scope, homeShorten(report.ConfigPath)); err != nil {
 			return err
 		}
-	} else if _, err := fmt.Fprintf(out, "gst check: source=%s ref=%s scope=%s\n", report.Source, ref, report.Scope); err != nil {
+	} else if _, err := fmt.Fprintf(out, "gh-skill-check: source=%s ref=%s scope=%s\n", report.Source, ref, report.Scope); err != nil {
 		return err
 	}
 	for _, ignored := range report.ScanFailures {
@@ -308,7 +310,7 @@ func renderCheckReport(out io.Writer, report checkReport) error {
 		}
 	}
 	if report.Ignored > 0 {
-		if _, err := fmt.Fprintf(out, "OK ignored: %d outside skill(s) matched project policy\n", report.Ignored); err != nil {
+		if _, err := fmt.Fprintf(out, "OK ignored: %d skill(s) matched project policy\n", report.Ignored); err != nil {
 			return err
 		}
 	}

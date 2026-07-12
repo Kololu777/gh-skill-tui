@@ -1,5 +1,5 @@
-name: 機能提案
-description: 改善案や新機能を提案する
+name: Feature request
+description: Propose an improvement or a new feature
 title: "[Feature]: "
 labels:
   - enhancement
@@ -7,27 +7,27 @@ body:
   - type: textarea
     id: problem
     attributes:
-      label: 解決したい課題
-      description: どのような場面で困っているかを記載してください。
+      label: Problem to solve
+      description: Describe the situation you are struggling with.
     validations:
       required: true
 
   - type: textarea
     id: proposal
     attributes:
-      label: 提案内容
-      description: 望ましい解決方法や画面・CLI の変更案を記載してください。
+      label: Proposal
+      description: Describe the desired solution or the UI / CLI changes you have in mind.
     validations:
       required: true
 
   - type: textarea
     id: alternatives
     attributes:
-      label: 代替案
-      description: 検討した別の方法があれば記載してください。
+      label: Alternatives
+      description: Other approaches you considered, if any.
 
   - type: textarea
     id: additional-context
     attributes:
-      label: 補足情報
-      description: 参考資料、モック、スクリーンショットなどがあれば追加してください。
+      label: Additional context
+      description: References, mockups, screenshots, and so on.
