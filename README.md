@@ -2,11 +2,27 @@
 
 **English** | [日本語](README.ja.md)
 
-**gh-skill** + **TUI** = **gh-skill-tui**
-
 ## What is gh-skill-tui?
 
 `gh skill` is a very handy CLI that installs and manages agent skills from GitHub repositories. Because `gh skill` is a CLI, managing multiple agent skills across multiple agents at the same time gets complicated. `gh-skill-tui` lets you manage multiple agent skills and multiple agents at once in a TUI, which is easy to grasp visually and simple to operate.
+
+## Demo
+
+**Install** — select skills and agents, press `i`, review the plan, `enter`:
+
+![install demo](demo/install.gif)
+
+**Update** — the source moved on since install (`↓`); `i` proposes an update:
+
+![update demo](demo/update.gif)
+
+**Delete** — `d` removes the managed copies from every agent at once:
+
+![delete demo](demo/delete.gif)
+
+**Propose a PR** — a locally edited copy (`m`) is sent back to the source with `p`:
+
+![pr demo](demo/pr.gif)
 
 ## Who is this for?
 

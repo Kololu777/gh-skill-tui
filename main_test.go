@@ -811,6 +811,7 @@ func TestNormalizeSkillMD(t *testing.T) {
 		"description: d",
 		"metadata:",
 		"    github-path: skills/a",
+		"    github-pinned: 0a0f7b0",
 		"    github-repo: https://github.com/o/r",
 		"    tui-tree-sha: abc",
 		"    local-path: /x",
