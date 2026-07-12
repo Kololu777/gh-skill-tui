@@ -1,9 +1,11 @@
 name: Latest Changes
 
+# Entries are recorded on develop only: the main-required-checks ruleset
+# rejects direct bot pushes to main, and every change reaches main through a
+# develop -> main (or release -> main) PR anyway.
 on:
   pull_request_target:
     branches:
-      - main
       - develop
     types:
       - closed
@@ -24,9 +26,7 @@ jobs:
       - name: Check out the repository
         uses: actions/checkout@v7
         with:
-          # Write the entry onto the branch the PR merged into; fall back to
-          # the default branch for manual workflow_dispatch runs.
-          ref: ${{ github.event.pull_request.base.ref || github.event.repository.default_branch }}
+          ref: develop
 
       - name: Update release notes
         uses: tiangolo/latest-changes@0.6.1

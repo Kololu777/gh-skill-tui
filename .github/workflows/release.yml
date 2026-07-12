@@ -1,0 +1,145 @@
+name: Release
+
+# Pushing to the `release` branch cuts a release once CI passes:
+#   1. package.nix gets the release version (minor auto-bump when the current
+#      version is already tagged; a hand-bumped version is released as-is)
+#   2. release-notes.md freezes the accumulated Latest Changes under `## x.y.z`
+#   3. the commit is tagged vX.Y.Z and a vX.Y series branch is created
+#   4. a GitHub Release is published with that section as its notes
+#   5. a PR back to main is opened (labeled `release` so latest-changes skips it)
+
+on:
+  push:
+    branches:
+      - release
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  test:
+    name: format, test, vet, build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Check formatting
+        run: make format-check
+
+      - name: Run tests
+        run: make test
+
+      - name: Run go vet
+        run: make vet
+
+      - name: Build
+        run: make build
+
+  lint:
+    name: golangci-lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.12.2
+
+  release:
+    name: version, tag, series branch, release notes
+    needs:
+      - test
+      - lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Decide the release version
+        id: version
+        run: |
+          current="$(sed -n 's/^  version = "\(.*\)";$/\1/p' package.nix)"
+          if [ -z "$current" ]; then
+            echo "could not read version from package.nix" >&2
+            exit 1
+          fi
+          if git rev-parse -q --verify "refs/tags/v$current" >/dev/null; then
+            major="${current%%.*}"
+            rest="${current#*.}"
+            minor="${rest%%.*}"
+            next="$major.$((minor + 1)).0"
+          else
+            next="$current"
+          fi
+          echo "version=$next" >> "$GITHUB_OUTPUT"
+          echo "series=v$(echo "$next" | cut -d. -f1-2)" >> "$GITHUB_OUTPUT"
+
+      - name: Update package.nix and release-notes.md
+        run: |
+          version="${{ steps.version.outputs.version }}"
+          sed -i "s/^  version = \".*\";$/  version = \"$version\";/" package.nix
+          awk -v ver="$version" '
+            { print }
+            /^## Latest Changes$/ && !done { print ""; print "## " ver; done = 1 }
+          ' release-notes.md > release-notes.md.new
+          mv release-notes.md.new release-notes.md
+
+      - name: Commit, tag, and create the series branch
+        run: |
+          version="${{ steps.version.outputs.version }}"
+          series="${{ steps.version.outputs.series }}"
+          git add package.nix release-notes.md
+          git commit -m "🔖 Release v$version"
+          git tag "v$version"
+          git push origin HEAD:release
+          git push origin "v$version"
+          git push origin "HEAD:refs/heads/$series"
+
+      - name: Create the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${{ steps.version.outputs.version }}"
+          awk -v ver="## $version" '
+            $0 == ver { grab = 1; next }
+            grab && /^## / { exit }
+            grab { print }
+          ' release-notes.md > "$RUNNER_TEMP/notes.md"
+          gh release create "v$version" --title "v$version" \
+            --notes-file "$RUNNER_TEMP/notes.md"
+
+      - name: Open a PR back to main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${{ steps.version.outputs.version }}"
+          gh label create release --description "release chores" \
+            --color ededed 2>/dev/null || true
+          gh pr create --base main --head release --label release \
+            --title "🔖 Release v$version" \
+            --body "Automated release PR for v$version: version bump and frozen release notes." \
+            || echo "PR already exists or could not be created; open it manually if needed"
