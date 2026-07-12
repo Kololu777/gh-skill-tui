@@ -301,8 +301,8 @@ func readInstalledSkill(root, rel string, allowed []string, allowedRoots []strin
 // ignored when comparing an installed copy against its source (and stripped
 // when sending edits back upstream).
 var injectedMetaKeys = []string{
-	"github-path:", "github-ref:", "github-repo:", "github-tree-sha:",
-	"local-path:", "tui-tree-sha:",
+	"github-path:", "github-pinned:", "github-ref:", "github-repo:",
+	"github-tree-sha:", "local-path:", "tui-tree-sha:",
 }
 
 // normalizeSkillMD removes the injected metadata keys from SKILL.md
