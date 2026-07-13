@@ -68,6 +68,8 @@ jobs:
       - test
       - lint
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - name: Check out the repository
         uses: actions/checkout@v6
@@ -143,3 +145,62 @@ jobs:
             --title "🔖 Release v$version" \
             --body "Automated release PR for v$version: version bump and frozen release notes." \
             || echo "PR already exists or could not be created; open it manually if needed"
+
+  # Precompiled binaries named gh-skill-tui_vX.Y.Z_<os>-<arch> on the release
+  # make `gh extension install Kololu777/gh-skill-tui` work without a Go
+  # toolchain: gh picks the asset whose name ends in its own <os>-<arch>.
+  extension-assets:
+    name: gh extension binaries
+    needs:
+      - release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the release tag
+        uses: actions/checkout@v6
+        with:
+          ref: v${{ needs.release.outputs.version }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Build and upload extension binaries
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${{ needs.release.outputs.version }}"
+          mkdir -p dist
+          # windows is skipped: pr.go uses the unix-only Setsid process attribute
+          for target in linux-amd64 linux-arm64 darwin-amd64 darwin-arm64; do
+            GOOS="${target%%-*}" GOARCH="${target##*-}" CGO_ENABLED=0 \
+              go build -trimpath -ldflags "-s -w -X main.version=$version" \
+              -o "dist/gh-skill-tui_v${version}_${target}" .
+          done
+          gh release upload "v$version" dist/* --clobber
+
+  # End-to-end check on clean runners: the published release must be
+  # installable as a gh extension and report the released version.
+  verify-extension-install:
+    name: verify gh extension install
+    needs:
+      - release
+      - extension-assets
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+          - ubuntu-24.04-arm
+          - macos-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Install the released extension and run it
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${{ needs.release.outputs.version }}"
+          gh extension install "$GITHUB_REPOSITORY"
+          got="$(gh skill-tui --version)"
+          echo "$got"
+          test "$got" = "gh-skill-tui version $version"
