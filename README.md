@@ -31,8 +31,20 @@
 
 ## Installation
 
-Building requires Go 1.22 or later. The tool drives the gh command, so install it first:
+The tool drives the gh command, so install it first:
 [GitHub CLI](https://cli.github.com/)
+
+The easiest way is as a gh extension — no Go toolchain or PATH setup needed:
+
+```sh
+gh extension install Kololu777/gh-skill-tui
+
+gh skill-tui               # start the TUI
+gh skill-tui check         # non-interactive audit (gh-skill-check equivalent)
+gh extension upgrade skill-tui
+```
+
+Or install the standalone binaries with Go 1.22 or later:
 
 ```sh
 # Install gh-skill-tui / gh-skill-check

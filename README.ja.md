@@ -31,8 +31,20 @@
 
 ## Installation
 
-ビルドには Go 1.22 以上が必要です。また gh コマンドを使いますので、先にインストールしてください。
+gh コマンドを使いますので、先にインストールしてください。
 [GitHub CLI](https://cli.github.com/)
+
+一番簡単なのは gh extension としてのインストールです。Go toolchain も PATH 設定も不要です。
+
+```sh
+gh extension install Kololu777/gh-skill-tui
+
+gh skill-tui               # TUI を起動
+gh skill-tui check         # 非対話の監査 (gh-skill-check 相当)
+gh extension upgrade skill-tui
+```
+
+または Go 1.22 以上でスタンドアロンのバイナリをインストールできます。
 
 ```sh
 # Install gh-skill-tui / gh-skill-check
