@@ -2,6 +2,8 @@
 
 ## Latest Changes
 
+* Release. PR [#16](https://github.com/Kololu777/gh-skill-tui/pull/16) by [@Kololu777](https://github.com/Kololu777).
+
 ## 0.2.0
 
 ## 0.1.0
