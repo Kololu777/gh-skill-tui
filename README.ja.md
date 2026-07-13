@@ -36,23 +36,19 @@
 
 ```sh
 # Install gh-skill-tui / gh-skill-check
-git clone https://github.com/Kololu777/gh-skill-tui.git
-cd gh-skill-tui
-go install .
+go install github.com/Kololu777/gh-skill-tui@latest
 ln -s "$(go env GOPATH)/bin/gh-skill-tui" "$(go env GOPATH)/bin/gh-skill-check"
 ```
 
 `go install` は `$(go env GOPATH)/bin`（通常 `~/go/bin`）にバイナリを置きます。ここを PATH に追加しておくと、`gh-skill-tui` / `gh-skill-check` をそのまま実行できます。`gh-skill-check` は同じバイナリへの symlink で、コマンド名によって動作が切り替わります（`gh-skill-tui check` でも同じです）。
 
-インストール後は `gh-skill-tui --version` でバージョンを確認できます。Nix ビルドはパッケージのバージョン、ソースビルドはビルド時の git リビジョンを表示します。
+インストール後は `gh-skill-tui --version` でバージョンを確認できます。`go install` と Nix ビルドはリリースのバージョン、ソースチェックアウトからのビルドはビルド時の git リビジョンを表示します。
 
-または
+または Nix flakes で
 
 ```sh
-nix build --impure --expr \
-  '(builtins.getFlake "nixpkgs").legacyPackages.${builtins.currentSystem}.callPackage ./package.nix {}'
-./result/bin/gh-skill-tui OWNER/skills-repo
-./result/bin/gh-skill-check
+nix run github:Kololu777/gh-skill-tui -- OWNER/skills-repo
+nix profile install github:Kololu777/gh-skill-tui
 ```
 
 `home-manager` では次のように追加できます。

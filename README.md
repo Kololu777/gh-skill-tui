@@ -36,23 +36,19 @@ Building requires Go 1.22 or later. The tool drives the gh command, so install i
 
 ```sh
 # Install gh-skill-tui / gh-skill-check
-git clone https://github.com/Kololu777/gh-skill-tui.git
-cd gh-skill-tui
-go install .
+go install github.com/Kololu777/gh-skill-tui@latest
 ln -s "$(go env GOPATH)/bin/gh-skill-tui" "$(go env GOPATH)/bin/gh-skill-check"
 ```
 
 `go install` places the binary in `$(go env GOPATH)/bin` (usually `~/go/bin`). Add that directory to your PATH and you can run `gh-skill-tui` / `gh-skill-check` directly. `gh-skill-check` is a symlink to the same binary; the behavior switches on the command name (`gh-skill-tui check` works the same way).
 
-After installing, `gh-skill-tui --version` prints the version. Nix builds report the package version; source builds report the git revision at build time.
+After installing, `gh-skill-tui --version` prints the version. `go install` and Nix builds report the released version; builds from a source checkout report the git revision at build time.
 
-Or:
+Or with Nix flakes:
 
 ```sh
-nix build --impure --expr \
-  '(builtins.getFlake "nixpkgs").legacyPackages.${builtins.currentSystem}.callPackage ./package.nix {}'
-./result/bin/gh-skill-tui OWNER/skills-repo
-./result/bin/gh-skill-check
+nix run github:Kololu777/gh-skill-tui -- OWNER/skills-repo
+nix profile install github:Kololu777/gh-skill-tui
 ```
 
 With `home-manager`:
