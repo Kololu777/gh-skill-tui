@@ -179,3 +179,28 @@ jobs:
               -o "dist/gh-skill-tui_v${version}_${target}" .
           done
           gh release upload "v$version" dist/* --clobber
+
+  # End-to-end check on clean runners: the published release must be
+  # installable as a gh extension and report the released version.
+  verify-extension-install:
+    name: verify gh extension install
+    needs:
+      - release
+      - extension-assets
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+          - ubuntu-24.04-arm
+          - macos-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Install the released extension and run it
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${{ needs.release.outputs.version }}"
+          gh extension install "$GITHUB_REPOSITORY"
+          got="$(gh skill-tui --version)"
+          echo "$got"
+          test "$got" = "gh-skill-tui version $version"
