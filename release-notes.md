@@ -2,6 +2,8 @@
 
 ## Latest Changes
 
+## 0.4.2 (2026-07-14)
+
 * fix(ci): set repository context when publishing releases. PR [#21](https://github.com/Kololu777/gh-skill-tui/pull/21) by [@Kololu777](https://github.com/Kololu777).
 
 ## 0.4.1 (2026-07-14)
