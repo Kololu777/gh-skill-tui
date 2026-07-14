@@ -1,6 +1,7 @@
 ## Summary
 
 <!-- Briefly describe the purpose and content of this change. -->
+<!-- Normal changes target release. Only generated release candidates target main. -->
 
 ## Changes
 
