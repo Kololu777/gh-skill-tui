@@ -29,7 +29,7 @@ version. The workflow:
 
 1. checks that the version is greater than the version in `package.nix` and
    that `vX.Y.Z` does not exist;
-2. creates `release/vX.Y.Z-<run-id>-<attempt>` from `release`;
+2. creates `release-vX.Y.Z-<run-id>-<attempt>` from `release`;
 3. updates `package.nix` and freezes `## Latest Changes` under a dated version
    heading;
 4. opens a `release`-labeled pull request to `main`; and
