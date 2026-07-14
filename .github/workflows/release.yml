@@ -1,164 +1,114 @@
-name: Release
+name: Publish Release
 
-# Pushing to the `release` branch cuts a release once CI passes:
-#   1. package.nix gets the release version (minor auto-bump when the current
-#      version is already tagged; a hand-bumped version is released as-is)
-#   2. release-notes.md freezes the accumulated Latest Changes under `## x.y.z`
-#   3. the commit is tagged vX.Y.Z and a vX.Y series branch is created
-#   4. a GitHub Release is published with that section as its notes
-#   5. a PR back to main is opened (labeled `release` so latest-changes skips it)
-
+# A manual Prepare Release dispatch creates a temporary release-vX.Y.Z-* branch
+# and a PR to main. Required PR checks are the release gate. Once GitHub merges
+# that PR, this workflow tags the exact merge commit, publishes extension
+# binaries, synchronizes the release hub, and removes the temporary branch.
 on:
-  push:
+  pull_request:
     branches:
-      - release
+      - main
+    types:
+      - closed
 
-permissions:
-  contents: write
-  pull-requests: write
-  issues: write
+permissions: {}
+
+concurrency:
+  group: publish-release
+  cancel-in-progress: false
 
 jobs:
-  test:
-    name: format, test, vet, build
+  prepare:
+    if: >-
+      github.event.pull_request.merged == true &&
+      contains(github.event.pull_request.labels.*.name, 'release') &&
+      startsWith(github.event.pull_request.head.ref, 'release-v')
     runs-on: ubuntu-latest
-    steps:
-      - name: Check out the repository
-        uses: actions/checkout@v6
-
-      - name: Set up Go
-        uses: actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-          cache-dependency-path: go.sum
-
-      - name: Check formatting
-        run: make format-check
-
-      - name: Run tests
-        run: make test
-
-      - name: Run go vet
-        run: make vet
-
-      - name: Build
-        run: make build
-
-  lint:
-    name: golangci-lint
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out the repository
-        uses: actions/checkout@v6
-
-      - name: Set up Go
-        uses: actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-          cache-dependency-path: go.sum
-
-      - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v9
-        with:
-          version: v2.12.2
-
-  release:
-    name: version, tag, series branch, release notes
-    needs:
-      - test
-      - lint
-    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: read
     outputs:
-      version: ${{ steps.version.outputs.version }}
+      branch: ${{ steps.details.outputs.branch }}
+      sha: ${{ steps.details.outputs.sha }}
+      tag: ${{ steps.details.outputs.tag }}
+      version: ${{ steps.details.outputs.version }}
     steps:
-      - name: Check out the repository
-        uses: actions/checkout@v6
+      - name: Check out the tested merge commit
+        uses: actions/checkout@v7
         with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
           fetch-depth: 0
+          persist-credentials: true
 
-      - name: Configure git
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
 
-      - name: Decide the release version
-        id: version
+      - name: Read and validate release details
+        id: details
+        env:
+          HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
+          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
         run: |
-          current="$(sed -n 's/^  version = "\(.*\)";$/\1/p' package.nix)"
-          if [ -z "$current" ]; then
-            echo "could not read version from package.nix" >&2
+          set -euo pipefail
+          version="$(go run ./cmd/prepare-release current-version)"
+          tag="v${version}"
+          case "$HEAD_BRANCH" in
+            "release-${tag}-"*) ;;
+            *)
+              echo "candidate branch $HEAD_BRANCH does not match version $tag" >&2
+              exit 1
+              ;;
+          esac
+          if git ls-remote --exit-code --tags origin "refs/tags/${tag}"; then
+            echo "tag $tag already exists" >&2
             exit 1
           fi
-          if git rev-parse -q --verify "refs/tags/v$current" >/dev/null; then
-            major="${current%%.*}"
-            rest="${current#*.}"
-            minor="${rest%%.*}"
-            next="$major.$((minor + 1)).0"
-          else
-            next="$current"
-          fi
-          echo "version=$next" >> "$GITHUB_OUTPUT"
-          echo "series=v$(echo "$next" | cut -d. -f1-2)" >> "$GITHUB_OUTPUT"
+          {
+            echo "branch=$HEAD_BRANCH"
+            echo "sha=$MERGE_SHA"
+            echo "tag=$tag"
+            echo "version=$version"
+          } >> "$GITHUB_OUTPUT"
 
-      - name: Update package.nix and release-notes.md
-        run: |
-          version="${{ steps.version.outputs.version }}"
-          sed -i "s/^  version = \".*\";$/  version = \"$version\";/" package.nix
-          awk -v ver="$version" '
-            { print }
-            /^## Latest Changes$/ && !done { print ""; print "## " ver; done = 1 }
-          ' release-notes.md > release-notes.md.new
-          mv release-notes.md.new release-notes.md
-
-      - name: Commit, tag, and create the series branch
-        run: |
-          version="${{ steps.version.outputs.version }}"
-          series="${{ steps.version.outputs.series }}"
-          git add package.nix release-notes.md
-          git commit -m "🔖 Release v$version"
-          git tag "v$version"
-          git push origin HEAD:release
-          git push origin "v$version"
-          git push origin "HEAD:refs/heads/$series"
-
-      - name: Create the GitHub Release
+      - name: Create the tag and draft release
         env:
           GH_TOKEN: ${{ github.token }}
+          MERGE_SHA: ${{ steps.details.outputs.sha }}
+          TAG: ${{ steps.details.outputs.tag }}
+          VERSION: ${{ steps.details.outputs.version }}
         run: |
-          version="${{ steps.version.outputs.version }}"
-          awk -v ver="## $version" '
-            $0 == ver { grab = 1; next }
-            grab && /^## / { exit }
-            grab { print }
-          ' release-notes.md > "$RUNNER_TEMP/notes.md"
-          gh release create "v$version" --title "v$version" \
-            --notes-file "$RUNNER_TEMP/notes.md"
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" "$MERGE_SHA" -m "Release $TAG"
+          git push origin "$TAG"
+          go run ./cmd/prepare-release release-notes --version "$VERSION" \
+            > "$RUNNER_TEMP/release-notes.md"
+          gh release create "$TAG" \
+            --draft \
+            --verify-tag \
+            --target "$MERGE_SHA" \
+            --title "$TAG" \
+            --notes-file "$RUNNER_TEMP/release-notes.md"
 
-      - name: Open a PR back to main
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          version="${{ steps.version.outputs.version }}"
-          gh label create release --description "release chores" \
-            --color ededed 2>/dev/null || true
-          gh pr create --base main --head release --label release \
-            --title "🔖 Release v$version" \
-            --body "Automated release PR for v$version: version bump and frozen release notes." \
-            || echo "PR already exists or could not be created; open it manually if needed"
-
-  # Precompiled binaries named gh-skill-tui_vX.Y.Z_<os>-<arch> on the release
-  # make `gh extension install Kololu777/gh-skill-tui` work without a Go
-  # toolchain: gh picks the asset whose name ends in its own <os>-<arch>.
   extension-assets:
-    name: gh extension binaries
+    name: Build extension assets
     needs:
-      - release
+      - prepare
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
     steps:
       - name: Check out the release tag
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
-          ref: v${{ needs.release.outputs.version }}
+          ref: ${{ needs.prepare.outputs.tag }}
+          persist-credentials: false
 
       - name: Set up Go
         uses: actions/setup-go@v6
@@ -166,41 +116,97 @@ jobs:
           go-version-file: go.mod
           cache-dependency-path: go.sum
 
-      - name: Build and upload extension binaries
+      - name: Build and validate extension binaries
         env:
-          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.prepare.outputs.version }}
         run: |
-          version="${{ needs.release.outputs.version }}"
+          set -euo pipefail
           mkdir -p dist
-          # windows is skipped: pr.go uses the unix-only Setsid process attribute
           for target in linux-amd64 linux-arm64 darwin-amd64 darwin-arm64; do
             GOOS="${target%%-*}" GOARCH="${target##*-}" CGO_ENABLED=0 \
-              go build -trimpath -ldflags "-s -w -X main.version=$version" \
-              -o "dist/gh-skill-tui_v${version}_${target}" .
+              go build -trimpath -ldflags "-s -w -X main.version=$VERSION" \
+              -o "dist/gh-skill-tui_v${VERSION}_${target}" .
           done
-          gh release upload "v$version" dist/* --clobber
+          binary="dist/gh-skill-tui_v${VERSION}_linux-amd64"
+          got="$("$binary" --version)"
+          test "$got" = "gh-skill-tui version $VERSION"
+          assets=(dist/gh-skill-tui_*)
+          sha256sum "${assets[@]}" > dist/checksums.txt
 
-  # End-to-end check on clean runners: the published release must be
-  # installable as a gh extension and report the released version.
-  verify-extension-install:
-    name: verify gh extension install
+      - name: Upload assets to the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+        run: gh release upload "$TAG" dist/*
+
+  publish:
     needs:
-      - release
+      - prepare
       - extension-assets
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: Publish the completed release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+        run: gh release edit "$TAG" --draft=false --latest
+
+  sync-release-hub:
+    needs:
+      - prepare
+      - publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Fast-forward release and delete the candidate branch
+        env:
+          BRANCH: ${{ needs.prepare.outputs.branch }}
+          RELEASE_SHA: ${{ needs.prepare.outputs.sha }}
+        run: |
+          set -euo pipefail
+          git fetch origin release
+          git merge-base --is-ancestor origin/release "$RELEASE_SHA"
+          git push origin "$RELEASE_SHA:refs/heads/release"
+          if git ls-remote --exit-code --heads origin "refs/heads/$BRANCH"; then
+            git push origin --delete "$BRANCH"
+          fi
+
+  verify-extension-install:
+    name: Verify gh extension install
+    needs:
+      - prepare
+      - publish
     strategy:
+      fail-fast: false
       matrix:
         os:
           - ubuntu-latest
           - ubuntu-24.04-arm
           - macos-latest
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    permissions:
+      contents: read
     steps:
-      - name: Install the released extension and run it
+      - name: Install the published extension and check its version
         env:
           GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.prepare.outputs.version }}
         run: |
-          version="${{ needs.release.outputs.version }}"
+          set -euo pipefail
           gh extension install "$GITHUB_REPOSITORY"
           got="$(gh skill-tui --version)"
           echo "$got"
-          test "$got" = "gh-skill-tui version $version"
+          test "$got" = "gh-skill-tui version $VERSION"
