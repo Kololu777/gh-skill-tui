@@ -1,0 +1,115 @@
+name: Prepare Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version in X.Y.Z format
+        required: true
+        type: string
+      date:
+        description: Release date in YYYY-MM-DD format (defaults to today)
+        required: false
+        type: string
+      auto_merge:
+        description: Merge automatically after all required checks pass
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+concurrency:
+  # Wait for a Latest Changes write already in progress before taking the
+  # immutable release-candidate snapshot.
+  group: release-hub-writes
+  cancel-in-progress: false
+
+jobs:
+  prepare-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}
+    steps:
+      - name: Check out the release hub
+        uses: actions/checkout@v7
+        with:
+          ref: release
+          fetch-depth: 0
+          token: ${{ env.RELEASE_TOKEN }}
+          persist-credentials: true
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Validate the requested version
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if git ls-remote --exit-code --tags origin "refs/tags/v${VERSION}"; then
+            echo "tag v${VERSION} already exists" >&2
+            exit 1
+          fi
+
+      - name: Prepare version and release notes
+        env:
+          VERSION: ${{ inputs.version }}
+          RELEASE_DATE: ${{ inputs.date }}
+        run: |
+          set -euo pipefail
+          args=(prepare --version "$VERSION")
+          if [ -n "$RELEASE_DATE" ]; then
+            args+=(--date "$RELEASE_DATE")
+          fi
+          go run ./cmd/prepare-release "${args[@]}"
+
+      - name: Create the release candidate branch
+        id: candidate
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          branch="release/v${VERSION}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git add package.nix release-notes.md
+          git commit -m "🔖 Prepare release v${VERSION}"
+          git push --set-upstream origin "$branch"
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+
+      - name: Open the release pull request
+        id: pull-request
+        env:
+          GH_TOKEN: ${{ env.RELEASE_TOKEN }}
+          VERSION: ${{ inputs.version }}
+          BRANCH: ${{ steps.candidate.outputs.branch }}
+        run: |
+          set -euo pipefail
+          gh label create release \
+            --description "release candidate" \
+            --color ededed \
+            --force
+          pr_url="$(gh pr create \
+            --base main \
+            --head "$BRANCH" \
+            --title "🔖 Release v${VERSION}" \
+            --body "Release candidate for v${VERSION}. Merge only after all required checks pass." \
+            --label release)"
+          echo "url=$pr_url" >> "$GITHUB_OUTPUT"
+          echo "$pr_url"
+
+      - name: Enable auto-merge after required checks
+        if: inputs.auto_merge
+        env:
+          GH_TOKEN: ${{ env.RELEASE_TOKEN }}
+          PR_URL: ${{ steps.pull-request.outputs.url }}
+        run: gh pr merge --auto --merge "$PR_URL"

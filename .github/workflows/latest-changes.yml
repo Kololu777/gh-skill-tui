@@ -1,12 +1,12 @@
 name: Latest Changes
 
-# Entries are recorded on develop only: the main-required-checks ruleset
-# rejects direct bot pushes to main, and every change reaches main through a
-# develop -> main (or release -> main) PR anyway.
+# The permanent release branch is the integration hub. Main only advances when
+# a tested release candidate is merged, so unqualified Nix flake runs stay on
+# the latest published source.
 on:
   pull_request_target:
     branches:
-      - main
+      - release
     types:
       - closed
   workflow_dispatch:
@@ -19,6 +19,10 @@ permissions:
   contents: write
   pull-requests: read
 
+concurrency:
+  group: release-hub-writes
+  cancel-in-progress: false
+
 jobs:
   latest-changes:
     runs-on: ubuntu-latest
@@ -26,7 +30,8 @@ jobs:
       - name: Check out the repository
         uses: actions/checkout@v7
         with:
-          ref: develop
+          ref: release
+          persist-credentials: true
 
       - name: Update release notes
         uses: tiangolo/latest-changes@0.6.1
