@@ -1373,6 +1373,104 @@ func TestBuildOutsideGroupsEveryNonSourceCopy(t *testing.T) {
 	}
 }
 
+func TestMergedOutsideCopyBecomesManagedSourceCopy(t *testing.T) {
+	const (
+		dest    = "skills/new-local"
+		content = "---\nname: new-local\n---\n# NEW\n"
+	)
+	sourceMsg := skillsLoadedMsg{
+		Skills:   []skill{{Path: dest + "/SKILL.md", Content: content}},
+		Ref:      "main",
+		TreeShas: map[string]string{dest: "merged-tree"},
+		BlobShas: map[string]string{dest + "/SKILL.md": gitBlobSha([]byte(content))},
+	}
+
+	for _, scanFirst := range []bool{false, true} {
+		name := "source-first"
+		if scanFirst {
+			name = "scan-first"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Setenv("GH_SKILL_DEFAULT_AGENTS", "codex")
+			root := t.TempDir()
+			dir := filepath.Join(root, "new-local")
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(content), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			installed, errMsg := readInstalledSkills(root, nil, nil)
+			if errMsg != "" {
+				t.Fatal(errMsg)
+			}
+			scanMsg := installedScannedMsg{Targets: []scanTarget{{
+				Scope: "project", Dir: root, Agents: []string{"codex"}, Skills: installed,
+			}}}
+
+			m := newModel(config{Source: "Owner/Repo", Scope: "project"})
+			messages := []tea.Msg{sourceMsg, scanMsg}
+			if scanFirst {
+				messages[0], messages[1] = messages[1], messages[0]
+			}
+			for _, msg := range messages {
+				next, _ := m.Update(msg)
+				m = next.(model)
+			}
+
+			if len(m.localOnly) != 0 {
+				t.Fatalf("merged copy remained outside: %+v", m.localOnly)
+			}
+			got, ok := m.lookup.byKey[dest]["codex|project"]
+			if !ok || got.Class != classManaged || got.RepoSlug != "owner/repo" ||
+				got.GhPath != dest || got.TreeSha != "merged-tree" {
+				t.Fatalf("reconciled copy = %+v (ok=%v)", got, ok)
+			}
+			if state := m.badgeState(m.skills[0], installTarget{Name: "codex", Short: "codex"}); state != badgeManaged {
+				t.Fatalf("badge = %v, want managed", state)
+			}
+		})
+	}
+}
+
+func TestSameNameDifferentOutsideCopyIsNotPromoted(t *testing.T) {
+	const dest = "skills/new-local"
+	sourceContent := "---\nname: new-local\n---\n# SOURCE\n"
+	installedContent := "---\nname: new-local\n---\n# LOCAL\n"
+	root := t.TempDir()
+	dir := filepath.Join(root, "new-local")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(installedContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	installed, errMsg := readInstalledSkills(root, nil, nil)
+	if errMsg != "" {
+		t.Fatal(errMsg)
+	}
+
+	m := newModel(config{Source: "Owner/Repo", Scope: "project"})
+	next, _ := m.Update(skillsLoadedMsg{
+		Skills:   []skill{{Path: dest + "/SKILL.md", Content: sourceContent}},
+		Ref:      "main",
+		TreeShas: map[string]string{dest: "source-tree"},
+		BlobShas: map[string]string{dest + "/SKILL.md": gitBlobSha([]byte(sourceContent))},
+	})
+	m = next.(model)
+	next, _ = m.Update(installedScannedMsg{Targets: []scanTarget{{
+		Scope: "project", Dir: root, Agents: []string{"codex"}, Skills: installed,
+	}}})
+	m = next.(model)
+
+	if len(m.localOnly) != 1 || m.localOnly[0].Name != "new-local" {
+		t.Fatalf("different outside copy was hidden: %+v", m.localOnly)
+	}
+	if _, ok := m.lookup.byKey[dest]["codex|project"]; ok {
+		t.Fatalf("different outside copy was promoted: %+v", m.lookup.byKey[dest])
+	}
+}
+
 func TestAllowedButDifferentRepositoryIsStillOutside(t *testing.T) {
 	m := loadedModel(t, config{Source: "Owner/Repo", Scope: "project"})
 	targets := []scanTarget{{
