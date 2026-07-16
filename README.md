@@ -108,6 +108,10 @@ To build an install / update / delete / PR plan, select the target skills and ag
 - `m` — the installed copy was edited locally
 - `O` — a copy outside the configured source (placed manually, another source, etc.)
 
+When an outside copy's import PR / MR has been merged, the next scan treats
+the exact matching copy as managed by the configured source. A same-name copy
+with different contents remains outside.
+
 #### Key map
 
 | Key                  | Action                                                                    |
