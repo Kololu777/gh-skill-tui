@@ -222,6 +222,16 @@ gh-skill-check --scope user
 check_ignore_skills = ["local-only", "tools/*"]
 ```
 
+TUI 経由の install / update は、インストール先の skill 群の隣に `.gh-skill-lock.json` としてコピーのスナップショットを記録します。このスナップショットにより、check は単なる「差分あり」ではなく状態を区別して報告できます。
+
+| 状態       | 意味                                       | 推奨アクション                                      |
+| ---------- | ------------------------------------------ | --------------------------------------------------- |
+| `outdated` | コピーは未編集だが source が更新されている | update してよい（手元の変更は失われない）           |
+| `modified` | コピーを手元で編集、source は未変更        | `p` で PR を提案、または `--force` で再インストール |
+| `conflict` | 手元の編集と source の更新が両方発生       | `p` で PR を提案、またはコピーを削除／再インストール |
+
+lock エントリがないコピー（過去のインストールや `gh skill` 直接実行分）は、従来どおり source リビジョンとの内容比較にフォールバックし、差分があれば `modified` として報告されます。project scope の lock ファイルはコミットしておくと、CI の check が同じ基準で動きます。
+
 ## Release Notes
 
 変更履歴は [release-notes.md](release-notes.md) を参照してください。
