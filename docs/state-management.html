@@ -1,0 +1,895 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <title>gh-skill-tui — 状態管理と検査の全体像</title>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --panel: #121a2e;
+      --panel-2: #18233c;
+      --ink: #e9eef9;
+      --muted: #9eabc3;
+      --line: #2c3a58;
+      --accent: #72e0c1;
+      --blue: #77bdfb;
+      --yellow: #f5c96a;
+      --orange: #f49a62;
+      --red: #ff7f8e;
+      --violet: #c9a6ff;
+      --ok-bg: #11342e;
+      --warn-bg: #3a2c17;
+      --bad-bg: #3a1d29;
+      --code: #08101d;
+      --shadow: 0 16px 46px rgba(0, 0, 0, .22);
+      --radius: 18px;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      overflow-x: hidden;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 12% -10%, rgba(114, 224, 193, .13), transparent 32rem),
+        radial-gradient(circle at 92% 12%, rgba(119, 189, 251, .12), transparent 30rem),
+        var(--bg);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+        "Segoe UI", "Noto Sans JP", sans-serif;
+      line-height: 1.72;
+    }
+
+    a { color: var(--blue); text-underline-offset: 3px; }
+    code, pre, .mono {
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    }
+    code {
+      padding: .12rem .34rem;
+      border: 1px solid rgba(119, 189, 251, .18);
+      border-radius: 6px;
+      background: rgba(8, 16, 29, .7);
+      color: #dceaff;
+      font-size: .92em;
+    }
+    pre {
+      overflow: auto;
+      margin: 1rem 0 0;
+      padding: 1rem 1.1rem;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--code);
+      color: #dce7fa;
+      line-height: 1.55;
+      tab-size: 2;
+    }
+
+    .page {
+      width: min(1180px, calc(100% - 32px));
+      margin: 0 auto;
+    }
+    header {
+      padding: 74px 0 42px;
+    }
+    .eyebrow {
+      margin: 0 0 12px;
+      color: var(--accent);
+      font-weight: 750;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      font-size: .78rem;
+      overflow-wrap: anywhere;
+    }
+    h1 {
+      max-width: 900px;
+      margin: 0;
+      font-size: clamp(2.25rem, 6vw, 4.7rem);
+      line-height: 1.05;
+      letter-spacing: -.045em;
+    }
+    .lead {
+      max-width: 830px;
+      margin: 24px 0 0;
+      color: var(--muted);
+      font-size: clamp(1.02rem, 2vw, 1.23rem);
+    }
+    .snapshot {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 9px;
+      margin-top: 25px;
+    }
+    .pill, .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: .28rem .65rem;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(18, 26, 46, .8);
+      color: var(--muted);
+      font-size: .82rem;
+      white-space: nowrap;
+    }
+    .snapshot .pill {
+      min-width: 0;
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .pill::before {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--accent);
+      content: "";
+    }
+
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      border-top: 1px solid rgba(255,255,255,.03);
+      border-bottom: 1px solid var(--line);
+      background: rgba(11, 16, 32, .88);
+      backdrop-filter: blur(15px);
+    }
+    nav .page {
+      display: flex;
+      gap: 22px;
+      overflow-x: auto;
+      padding-top: 12px;
+      padding-bottom: 12px;
+      scrollbar-width: thin;
+    }
+    nav a {
+      color: var(--muted);
+      font-size: .88rem;
+      font-weight: 700;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+    nav a:hover { color: var(--ink); }
+
+    main { padding: 30px 0 90px; }
+    section {
+      scroll-margin-top: 70px;
+      margin-top: 58px;
+    }
+    h2 {
+      margin: 0 0 8px;
+      font-size: clamp(1.55rem, 3vw, 2.25rem);
+      line-height: 1.2;
+      letter-spacing: -.025em;
+    }
+    h3 {
+      margin: 0 0 10px;
+      font-size: 1.12rem;
+      line-height: 1.35;
+    }
+    .section-intro {
+      max-width: 880px;
+      margin: 0 0 24px;
+      color: var(--muted);
+    }
+
+    .hero-note, .callout {
+      padding: 22px 24px;
+      border: 1px solid rgba(114, 224, 193, .34);
+      border-radius: var(--radius);
+      background: linear-gradient(135deg, rgba(17, 52, 46, .92), rgba(18, 26, 46, .9));
+      box-shadow: var(--shadow);
+      overflow-wrap: anywhere;
+    }
+    .hero-note strong, .callout strong { color: var(--accent); }
+    .callout.warn {
+      border-color: rgba(245, 201, 106, .35);
+      background: linear-gradient(135deg, rgba(58, 44, 23, .9), rgba(18, 26, 46, .9));
+    }
+    .callout.warn strong { color: var(--yellow); }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap: 16px;
+    }
+    .card {
+      grid-column: span 4;
+      min-width: 0;
+      padding: 20px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: linear-gradient(160deg, rgba(24, 35, 60, .86), rgba(18, 26, 46, .93));
+      box-shadow: var(--shadow);
+    }
+    .card.wide { grid-column: span 6; }
+    .card.full { grid-column: 1 / -1; }
+    .card p { margin: 0; color: var(--muted); }
+    .number {
+      display: inline-grid;
+      place-items: center;
+      width: 28px;
+      height: 28px;
+      margin-bottom: 13px;
+      border-radius: 9px;
+      background: rgba(114, 224, 193, .13);
+      color: var(--accent);
+      font-weight: 850;
+      font-size: .82rem;
+    }
+
+    .flow {
+      display: grid;
+      grid-template-columns: 1fr 40px 1fr 40px 1fr;
+      align-items: stretch;
+      margin-top: 22px;
+    }
+    .flow-box {
+      padding: 19px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: var(--panel);
+    }
+    .flow-box h3 { color: var(--blue); }
+    .flow-box p { margin: 0; color: var(--muted); font-size: .93rem; }
+    .arrow {
+      display: grid;
+      place-items: center;
+      color: var(--accent);
+      font-size: 1.45rem;
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: 15px;
+      background: rgba(18, 26, 46, .88);
+      box-shadow: var(--shadow);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: .92rem;
+    }
+    th, td {
+      padding: 13px 14px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      color: #cbd8ee;
+      background: rgba(24, 35, 60, .92);
+      font-size: .79rem;
+      letter-spacing: .035em;
+      text-transform: uppercase;
+    }
+    tr:last-child td { border-bottom: 0; }
+    td { color: var(--muted); }
+    td:first-child { color: var(--ink); }
+    .status.ok { color: var(--accent); border-color: rgba(114,224,193,.35); background: var(--ok-bg); }
+    .status.warn { color: var(--yellow); border-color: rgba(245,201,106,.35); background: var(--warn-bg); }
+    .status.bad { color: var(--red); border-color: rgba(255,127,142,.35); background: var(--bad-bg); }
+    .status.info { color: var(--blue); border-color: rgba(119,189,251,.35); }
+    .status.violet { color: var(--violet); border-color: rgba(201,166,255,.35); }
+
+    .steps {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      counter-reset: steps;
+    }
+    .steps li {
+      position: relative;
+      margin-left: 18px;
+      padding: 0 0 25px 35px;
+      border-left: 1px solid var(--line);
+      counter-increment: steps;
+    }
+    .steps li:last-child { padding-bottom: 0; border-left-color: transparent; }
+    .steps li::before {
+      position: absolute;
+      left: -15px;
+      top: -2px;
+      display: grid;
+      place-items: center;
+      width: 29px;
+      height: 29px;
+      border: 1px solid rgba(114,224,193,.4);
+      border-radius: 50%;
+      background: var(--panel);
+      color: var(--accent);
+      content: counter(steps);
+      font-size: .78rem;
+      font-weight: 800;
+    }
+    .steps strong { display: block; margin-bottom: 4px; color: var(--ink); }
+    .steps span { color: var(--muted); }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 9px;
+      margin: 15px 0 0;
+    }
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+    }
+    ul.compact { margin: 8px 0 0; padding-left: 1.15rem; }
+    ul.compact li { margin: .42rem 0; color: var(--muted); }
+    details {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(18, 26, 46, .72);
+    }
+    details + details { margin-top: 10px; }
+    summary {
+      cursor: pointer;
+      padding: 14px 17px;
+      color: var(--ink);
+      font-weight: 750;
+    }
+    details > div { padding: 0 17px 16px; color: var(--muted); }
+
+    footer {
+      padding: 30px 0 55px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: .88rem;
+    }
+
+    @media (max-width: 880px) {
+      .card, .card.wide { grid-column: span 6; }
+      .flow { grid-template-columns: 1fr; gap: 10px; }
+      .arrow { transform: rotate(90deg); min-height: 28px; }
+      .two-col { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 610px) {
+      .page { width: min(100% - 22px, 1180px); }
+      header { padding-top: 50px; }
+      .card, .card.wide { grid-column: 1 / -1; }
+      th, td { padding: 11px 10px; }
+    }
+    @media print {
+      :root {
+        --bg: white; --panel: white; --panel-2: #f5f7fa; --ink: #172033;
+        --muted: #4e596d; --line: #cfd6e1; --code: #f4f6f9; --shadow: none;
+      }
+      body { background: white; }
+      nav { display: none; }
+      header { padding-top: 25px; }
+      section { break-inside: avoid; margin-top: 34px; }
+      .card, .table-wrap, .hero-note, .callout { box-shadow: none; }
+      a { color: inherit; }
+    }
+  </style>
+</head>
+<body>
+  <header class="page">
+    <p class="eyebrow">Architecture note / current implementation</p>
+    <h1>状態はひとつではない。<br>由来・配置・内容を分けて見る。</h1>
+    <p class="lead">
+      <code>gh-skill-tui</code> が何を保存し、どこを走査し、TUI・checker・GitHub CLI が
+      それぞれ何を「最新」と呼んでいるかを、現行コードに沿って整理した資料です。
+    </p>
+    <div class="snapshot" aria-label="document snapshot">
+      <span class="pill">2026-07-16</span>
+      <span class="pill">branch: agent/reconcile-merged-outside-skills</span>
+      <span class="pill">base: 81c35e7d4fbb + working tree</span>
+      <span class="pill">content-authoritative checker</span>
+    </div>
+  </header>
+
+  <nav aria-label="section navigation">
+    <div class="page">
+      <a href="#summary">結論</a>
+      <a href="#axes">5つの軸</a>
+      <a href="#sources">情報源</a>
+      <a href="#scan">走査と配置</a>
+      <a href="#derive">状態の導出</a>
+      <a href="#content">内容比較</a>
+      <a href="#methods">検査手段</a>
+      <a href="#checker">checker詳細</a>
+      <a href="#transitions">状態遷移</a>
+      <a href="#gaps">現在の非対称性</a>
+      <a href="#recipes">運用レシピ</a>
+    </div>
+  </nav>
+
+  <main class="page">
+    <section id="summary">
+      <div class="hero-note">
+        <strong>現在の結論：</strong>
+        <code>gh-skill-check</code> の合否は tree SHA ではなく、選択した source revision と
+        インストール済みファイルの実質的な内容一致で決まる。SHA は由来・高速な更新候補表示に使えるが、
+        checker の正しさの根拠にはしない。一方で TUI と <code>gh skill update</code> は、まだ SHA を状態表示に使う。
+      </div>
+    </section>
+
+    <section id="axes">
+      <h2>状態を構成する5つの軸</h2>
+      <p class="section-intro">
+        「installed / outdated」の一列だけで表すと、信頼性・配置・同期状態が混ざる。
+        現行実装を理解するには次の軸を独立に考えるのがよい。
+      </p>
+      <div class="grid">
+        <article class="card">
+          <span class="number">01</span>
+          <h3>由来 / provenance</h3>
+          <p><code>github-repo</code> または <code>local-path</code> が許可元に属するか。結果は managed / foreign / untracked。</p>
+        </article>
+        <article class="card">
+          <span class="number">02</span>
+          <h3>configured source 所属</h3>
+          <p>許可済みであるだけでなく、いま開いている source と同一か。別の許可リポジトリもここでは outside。</p>
+        </article>
+        <article class="card">
+          <span class="number">03</span>
+          <h3>配置 / coverage</h3>
+          <p>どの physical destination に存在するか。複数agentが同じ <code>.agents/skills</code> を共有する。</p>
+        </article>
+        <article class="card wide">
+          <span class="number">04</span>
+          <h3>内容 / content</h3>
+          <p>source revision のファイル集合と同じか。checkerではこの軸が合否の正本。追加・変更・削除を比較する。</p>
+        </article>
+        <article class="card wide">
+          <span class="number">05</span>
+          <h3>追跡メタデータ / tracking</h3>
+          <p><code>github-tree-sha</code>、<code>tui-tree-sha</code>、refなど。欠落・古さと内容不一致は別問題として扱う。</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="sources">
+      <h2>比較に使う情報源</h2>
+      <p class="section-intro">source snapshot と installed snapshot を別々に作り、最後に同じ skill key で結び付ける。</p>
+
+      <div class="flow" role="img" aria-label="source and installed data flow">
+        <div class="flow-box">
+          <h3>Source snapshot</h3>
+          <p>GitHub tree API、または local Git の tracked tree。skill path、tree SHA、各fileのblob SHA、SKILL.md本文。</p>
+        </div>
+        <div class="arrow">→</div>
+        <div class="flow-box">
+          <h3>Canonical comparison</h3>
+          <p>source keyで対応付け。補助fileはblob、SKILL.mdは注入metadataを除いた意味比較。</p>
+        </div>
+        <div class="arrow">←</div>
+        <div class="flow-box">
+          <h3>Installed snapshot</h3>
+          <p>各skills rootを走査。frontmatter metadata、raw SKILL.md、file集合とcontent hashを保持。</p>
+        </div>
+      </div>
+
+      <div class="two-col" style="margin-top:18px">
+        <article class="card full">
+          <h3>Remote source</h3>
+          <ul class="compact">
+            <li><code>pin</code> があれば pin、なければ <code>ref</code>、どちらもなければdefault branchを選ぶ。</li>
+            <li>recursive tree APIからskill directoryのtree SHAと、全tracked fileのblob SHAを得る。</li>
+            <li>TUIはremote <code>SKILL.md</code> 本文を必要時にlazy loadする。</li>
+            <li>checkerは対象scopeで必要な <code>SKILL.md</code> 本文を先に読み、意味比較を完結させる。</li>
+          </ul>
+        </article>
+        <article class="card full">
+          <h3>Local source</h3>
+          <ul class="compact">
+            <li><code>git ls-files</code> でtracked skillだけを発見し、tree/blob SHAは <code>HEAD</code> から得る。</li>
+            <li><code>SKILL.md</code> 本文はworking treeから読むため、未commitのSKILL.md変更は意味比較に現れる。</li>
+            <li>一方、補助fileの比較元blobはHEAD。未commitの補助file変更はsource snapshotへ反映されない。</li>
+            <li>local cloneがoriginより古いかどうかは、このツールの検査範囲外。</li>
+          </ul>
+        </article>
+      </div>
+
+      <h3 style="margin-top:25px">installedSkill が保持するもの</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>field</th><th>由来</th><th>用途</th></tr></thead>
+          <tbody>
+            <tr><td><code>Name</code> / <code>Dir</code></td><td>skills rootからの相対名 / 実path</td><td>表示、配置、file走査</td></tr>
+            <tr><td><code>Class</code></td><td>metadataとallowlist</td><td>managed / foreign / untracked</td></tr>
+            <tr><td><code>RepoSlug</code> / <code>GhPath</code></td><td><code>github-repo</code> / <code>github-path</code></td><td>remote sourceとの対応付け</td></tr>
+            <tr><td><code>LocalPath</code></td><td><code>local-path</code></td><td>local sourceとの対応付け</td></tr>
+            <tr><td><code>TreeSha</code></td><td><code>tui-tree-sha</code>優先、なければ<code>github-tree-sha</code></td><td>TUIのoutdated表示。checker合否には不使用</td></tr>
+            <tr><td><code>Ref</code></td><td><code>github-ref</code></td><td>由来表示</td></tr>
+            <tr><td><code>SkillMD</code></td><td>installed raw file</td><td>意味比較、diff、PR再構築</td></tr>
+            <tr><td><code>FileShas</code></td><td>installed fileをその場でhash</td><td>追加・変更・削除の検出</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="scan">
+      <h2>どこを走査するか</h2>
+      <p class="section-intro">
+        起動時にはuser/projectの両scopeを走査し、同じphysical directoryは1 targetにまとめる。
+        checkerはその後、指定されたscopeだけを評価する。
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Agent</th><th>User scope</th><th>Project scope</th><th>install方式</th></tr></thead>
+          <tbody>
+            <tr><td>Claude Code</td><td><code>~/.claude/skills</code></td><td><code>.claude/skills</code></td><td><code>--agent claude-code</code></td></tr>
+            <tr><td>Codex</td><td><code>~/.codex/skills</code></td><td><code>.agents/skills</code></td><td><code>--agent codex</code></td></tr>
+            <tr><td>OpenCode</td><td><code>~/.config/opencode/skills</code></td><td><code>.opencode/skills</code></td><td><code>--dir</code></td></tr>
+            <tr><td>Kimi</td><td><code>~/.agents/skills</code></td><td><code>.agents/skills</code></td><td><code>--dir</code></td></tr>
+            <tr><td>GitHub Copilot</td><td><code>~/.copilot/skills</code></td><td><code>.agents/skills</code></td><td><code>--agent github-copilot</code></td></tr>
+            <tr><td>Cursor</td><td><code>~/.cursor/skills</code></td><td><code>.agents/skills</code></td><td><code>--agent cursor</code></td></tr>
+            <tr><td>Gemini</td><td><code>~/.gemini/skills</code></td><td><code>.agents/skills</code></td><td><code>--agent gemini</code></td></tr>
+            <tr><td>Antigravity</td><td><code>~/.gemini/antigravity/skills</code></td><td><code>.agents/skills</code></td><td><code>--agent antigravity</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="callout warn" style="margin-top:18px">
+        <strong>共有destinationに注意：</strong>
+        project scopeのCodex/Kimi/Copilot/Cursor/Gemini/Antigravityは同じ <code>.agents/skills</code> を見る。
+        UI上は複数agentでも、install・scan・coverageでは同じphysical copyとしてdedupeされる。
+      </div>
+      <div class="grid" style="margin-top:18px">
+        <article class="card wide">
+          <h3>走査する深さ</h3>
+          <p><code>&lt;root&gt;/*/SKILL.md</code> と <code>&lt;root&gt;/*/*/SKILL.md</code>。通常名と <code>author/skill</code> の2段namespaceに対応する。</p>
+        </article>
+        <article class="card wide">
+          <h3>除外・symlink</h3>
+          <p>dot directoryはvendor/internal領域として走査しない。skills root直下のdirectory symlinkは実体へ追従する。</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="derive">
+      <h2>状態をどう導出するか</h2>
+      <p class="section-intro">同じinstalled copyでも、「許可元か」と「現在のconfigured sourceか」は別判定。</p>
+
+      <div class="grid">
+        <article class="card">
+          <h3><span class="status ok">managed</span></h3>
+          <p>GitHub repo slugがallowed sourcesに一致、またはlocal pathがallowed local roots配下。</p>
+        </article>
+        <article class="card">
+          <h3><span class="status bad">foreign</span></h3>
+          <p>GitHub metadataはあるが、repo slugがallowlistにない。由来は分かるが信頼対象外。</p>
+        </article>
+        <article class="card">
+          <h3><span class="status warn">untracked</span></h3>
+          <p>信頼できるsource metadataがない。手置き、自作、他tool由来などを含む。</p>
+        </article>
+      </div>
+
+      <h3 style="margin-top:28px">configured sourceとの関係を重ねる</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>状況</th><th>TUI</th><th>gh-skill-check</th><th>説明</th></tr></thead>
+          <tbody>
+            <tr>
+              <td>copyなし</td><td><span class="status info">absent</span></td><td><span class="status ok">何も報告しない</span></td>
+              <td>checkerは「全source skillを全agentへ必須」にするcoverage policyではない。</td>
+            </tr>
+            <tr>
+              <td>同じsource・内容一致・SHA一致/欠落</td><td><span class="status ok">✓ managed</span></td><td><span class="status ok">PASS</span></td>
+              <td>SHA欠落はcontent一致を妨げない。</td>
+            </tr>
+            <tr>
+              <td>同じsource・内容一致・SHAだけ不一致</td><td><span class="status warn">↓ outdated</span></td><td><span class="status ok">PASS</span></td>
+              <td>現在の主要な非対称性。TUIはSHA優先、checkerはcontent優先。</td>
+            </tr>
+            <tr>
+              <td>同じsource・内容差分・SHA一致/欠落</td><td><span class="status violet">m modified</span></td><td><span class="status bad">modified</span></td>
+              <td>local editかsource更新かは、内容だけでは方向を断定できない。</td>
+            </tr>
+            <tr>
+              <td>同じsource・内容差分・SHA不一致</td><td><span class="status warn">↓ outdated</span></td><td><span class="status bad">modified</span></td>
+              <td>TUIは先にSHA mismatchへ短絡する。</td>
+            </tr>
+            <tr>
+              <td>configured source metadataだがpathがsourceにない</td><td><span class="status warn">O outside</span></td><td><span class="status bad">missing-source</span></td>
+              <td>削除済みpath、誤metadata、未mergeのimportなど。</td>
+            </tr>
+            <tr>
+              <td>別のallowed source</td><td><span class="status warn">O outside</span></td><td><span class="status bad">outside</span></td>
+              <td>supply-chain上はmanagedでも、現在のauthoritative sourceには属さない。</td>
+            </tr>
+            <tr>
+              <td>foreign / untracked</td><td><span class="status warn">O outside</span></td><td><span class="status bad">outside</span></td>
+              <td>TUIの <code>p</code> でsourceへのimport PR候補にできる。</td>
+            </tr>
+            <tr>
+              <td>ignore pattern一致</td><td>通常どおり表示</td><td><span class="status info">ignored</span></td>
+              <td><code>check_ignore_skills</code> はcheckerだけに作用。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p class="section-intro" style="margin-top:15px">
+        TUIのremote <code>SKILL.md</code> 本文はlazy loadされるため、SHAが一致または欠落していて
+        差分がSKILL.mdだけにある場合、本文load前は一時的に <code>✓</code>、load後に <code>m</code> となり得る。
+        checkerは判定前に必要な本文をloadするので、この一時状態はない。
+      </p>
+
+      <div class="callout" style="margin-top:18px">
+        <strong>content-based promotion：</strong>
+        outside copyとsource側の同名pathのfile集合が完全一致した場合、TUI/checkerはそのscan中だけmanaged相当に昇格できる。
+        import PRがmergeされた後を自動認識するための処理で、installed <code>SKILL.md</code> 自体は書き換えない。
+      </div>
+    </section>
+
+    <section id="content">
+      <h2>「diffが合っている」の定義</h2>
+      <p class="section-intro">単純なdirectory byte diffではない。installerが注入・再整形する差を取り除いてから比較する。</p>
+      <div class="two-col">
+        <article class="card full">
+          <h3>SKILL.md</h3>
+          <ul class="compact">
+            <li><code>github-path</code>、<code>github-ref</code>、<code>github-repo</code>、<code>github-tree-sha</code> を除去。</li>
+            <li><code>github-pinned</code>、<code>local-path</code>、<code>tui-tree-sha</code> も除去。</li>
+            <li>空になった <code>metadata:</code> mappingを除去。</li>
+            <li>frontmatterのtop-level順序、child順序、indent差をcanonicalize。</li>
+            <li>installerが除くfrontmatter直後の空行や末尾改行差を無視。</li>
+            <li>本文やユーザー独自metadataの意味のある変更は差分。</li>
+          </ul>
+        </article>
+        <article class="card full">
+          <h3>Companion files</h3>
+          <ul class="compact">
+            <li>各file内容をGit blob SHA-1形式でhashし、source treeのblob SHAと比較。</li>
+            <li>sourceにあるのにinstalledにないfileは削除差分。</li>
+            <li>installedにだけあるfileは追加差分。</li>
+            <li>file mode / executable bitは比較しない。内容のみ。</li>
+            <li><code>__pycache__</code>、<code>node_modules</code>、<code>.DS_Store</code> は両側で無視。</li>
+          </ul>
+        </article>
+      </div>
+      <pre><code>sourceFilesFor(skillKey)  = { relative/path -&gt; source blob SHA }
+installed.FileShas       = { relative/path -&gt; installed blob SHA }
+
+equal = same file set
+     &amp;&amp; same companion-file blobs
+     &amp;&amp; skillMDEquivalent(source.SKILL.md, installed.SKILL.md)</code></pre>
+    </section>
+
+    <section id="methods">
+      <h2>いま使える検査手段</h2>
+      <p class="section-intro">目的ごとに使い分ける。4つは同じ質問に答えていない。</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>手段</th><th>主な質問</th><th>判定材料</th><th>範囲</th><th>書き込み</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><code>gh-skill-check</code></td>
+              <td>configured sourceと実ファイルが一致するか</td>
+              <td><strong>content diff</strong>、provenance、source path</td>
+              <td>指定scope、TUIが知る全target</td>
+              <td><span class="status ok">read-only</span></td>
+            </tr>
+            <tr>
+              <td><code>gh-skill-tui</code></td>
+              <td>配置・outside・更新候補・local editを対話確認したい</td>
+              <td>tree SHA優先 + content diff + coverage</td>
+              <td>両scopeをscan、表示は選択scope</td>
+              <td>閲覧はread-only。plan確定で変更</td>
+            </tr>
+            <tr>
+              <td><code>gh skill update --dry-run</code></td>
+              <td>GitHub CLIが再download対象と考えるか</td>
+              <td><strong>tracking tree SHA</strong></td>
+              <td>GitHub CLI既知host。custom dirは<code>--dir</code></td>
+              <td><span class="status ok">read-only</span></td>
+            </tr>
+            <tr>
+              <td><code>git diff</code></td>
+              <td>project repoのcommitに対する作業tree差分は何か</td>
+              <td>project Git index / commit</td>
+              <td>Git管理下のinstall先だけ</td>
+              <td><span class="status ok">read-only</span></td>
+            </tr>
+            <tr>
+              <td><code>go test ./...</code></td>
+              <td>状態判定ロジック自体が回帰していないか</td>
+              <td>unit/integration fixtures</td>
+              <td>実装</td>
+              <td>test tempのみ</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="section-intro" style="margin-top:15px">
+        <code>git diff</code> はsource repositoryとの比較ではない。またinstalled <code>SKILL.md</code> には追跡metadataが入るため、
+        rawな <code>diff -ru</code> はcheckerの意味比較と同じ結果にはならない。
+      </p>
+    </section>
+
+    <section id="checker">
+      <h2>gh-skill-check の判定手順</h2>
+      <p class="section-intro">CI向けのread-only audit。更新・PR作成は行わない。</p>
+      <ol class="steps">
+        <li><strong>source revisionを解決</strong><span>remote treeまたはlocal HEADからskill、tree、blob一覧を作る。</span></li>
+        <li><strong>全targetをscan</strong><span>user/projectのphysical rootをdedupeしてinstalled snapshotを作る。</span></li>
+        <li><strong>configured sourceをauthoritativeにする</strong><span>checkerではproject sourceをallowlistへ加え、比較対象として認識する。</span></li>
+        <li><strong>対象scopeのSKILL.mdをload</strong><span>remote sourceでも意味比較できるよう、必要なdistinct skill本文を取得する。</span></li>
+        <li><strong>ignoreを先に適用</strong><span>name、github path、basenameにglob patternを当てる。outsideにも適用。</span></li>
+        <li><strong>provenanceとsource pathを確認</strong><span>別sourceはoutside、sourceにpathがなければmissing-source。</span></li>
+        <li><strong>contentを比較</strong><span>tree SHAは見ず、file集合・companion blob・semantic SKILL.mdが一致すればPASS。</span></li>
+        <li><strong>終了codeを返す</strong><span>問題なし=0、audit issue=1、設定/API/実行error=2。</span></li>
+      </ol>
+
+      <div class="two-col" style="margin-top:25px">
+        <article class="card full">
+          <h3>検出するもの</h3>
+          <ul class="compact">
+            <li>configured sourceに属さないoutside copy</li>
+            <li>sourceから消えたtracked path</li>
+            <li>installed fileの追加・変更・削除</li>
+            <li>scan不能target</li>
+            <li>不正なignore globやsource取得失敗</li>
+          </ul>
+        </article>
+        <article class="card full">
+          <h3>検出しないもの</h3>
+          <ul class="compact">
+            <li>source skillが未installであること</li>
+            <li>選択agentすべてへの必須coverage</li>
+            <li>tree SHA metadataの欠落・古さ</li>
+            <li>無視対象cache/litterの差</li>
+            <li>file mode差、local cloneのorigin遅延</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section id="transitions">
+      <h2>状態が変わるとき</h2>
+      <div class="grid">
+        <article class="card wide">
+          <span class="number">A</span>
+          <h3>Remote install / update</h3>
+          <p><code>gh skill install</code> がrepo/path/ref/tree SHA metadataをSKILL.mdへ注入。次回scanでsource keyと結び付く。</p>
+        </article>
+        <article class="card wide">
+          <span class="number">B</span>
+          <h3>Local install / update</h3>
+          <p>GitHub CLIが <code>local-path</code> を注入し、TUIが成功後に <code>tui-tree-sha</code> を追記する。</p>
+        </article>
+        <article class="card wide">
+          <span class="number">C</span>
+          <h3>Local edit</h3>
+          <p>FileShasとsource blobsがずれる。TUIでは <code>m</code>、checkerでは <code>modified</code>。TUIの<code>p</code>はupstream PRを組み立てる。</p>
+        </article>
+        <article class="card wide">
+          <span class="number">D</span>
+          <h3>Outside import / adopt</h3>
+          <p>outside copyは<code>p</code>でsourceへimport。merge後に内容一致すればmemory上でmanagedへ昇格。source rowのinstallは既存outsideをadopt/replaceする。</p>
+        </article>
+        <article class="card full">
+          <span class="number">E</span>
+          <h3>Rescan</h3>
+          <p>
+            install/delete/PR操作後、または <code>r</code> でinstalled rootsを再走査する。
+            状態を保存する独立databaseやlockfileはなく、source snapshot + filesystem + SKILL.md metadataから都度再構築する。
+          </p>
+        </article>
+      </div>
+    </section>
+
+    <section id="gaps">
+      <h2>現在の非対称性と整理候補</h2>
+      <p class="section-intro">ここは「実装済み」と「次に揃えるなら」を分けて読む。</p>
+      <details open>
+        <summary>1. checkerはcontent優先、TUIはtree SHA優先</summary>
+        <div>
+          同じ内容でもtracking SHAだけ古い場合、checkerはPASS、TUIは <code>↓ outdated</code>。
+          一貫させるならTUIもcontentを正本にし、metadata staleを別badgeにするのが分かりやすい。
+        </div>
+      </details>
+      <details>
+        <summary>2. 「modified」は差分の方向を断定できない</summary>
+        <div>
+          内容差分は「installedを手で編集した」「sourceが進んだ」「両方」のどれでも起きる。
+          checkerのissue名を <code>content-drift</code> にすると意味がより正確になる。
+        </div>
+      </details>
+      <details>
+        <summary>3. repair hintがphysical destinationを持っていない</summary>
+        <div>
+          現在のchecker actionはskill pathとscope中心で、<code>.claude</code> の <code>--agent</code> や
+          <code>.opencode</code> の <code>--dir</code> を完全には表現しない。issueへtarget情報を渡せば正確なfixを生成できる。
+        </div>
+      </details>
+      <details>
+        <summary>4. checkerはcoverage policyではない</summary>
+        <div>
+          既存copyの健全性は検査するが、「この5skillをClaude/Codex/OpenCodeへ必ず配置する」は表せない。
+          必要なら <code>required_skills</code> / <code>required_agents</code> のような別policyが必要。
+        </div>
+      </details>
+      <details>
+        <summary>5. local source snapshotが一部working tree、一部HEAD</summary>
+        <div>
+          SKILL.md本文はworking tree、companion blobはHEAD。sourceを完全にHEAD基準にするか、
+          完全にworking tree基準にするかを明示的に選ぶ余地がある。
+        </div>
+      </details>
+      <details>
+        <summary>6. remote semantic checkはskillごとの本文取得が必要</summary>
+        <div>
+          recursive tree一回だけではfrontmatterの意味比較ができないため、checkerは対象distinct skillの本文を追加取得する。
+          正確さと引き換えにAPI round tripが増える。
+        </div>
+      </details>
+    </section>
+
+    <section id="recipes">
+      <h2>運用レシピ</h2>
+      <div class="two-col">
+        <article class="card full">
+          <h3>CI / pre-commit：内容一致を保証</h3>
+          <pre><code>gh-skill-check --scope project</code></pre>
+          <p style="margin-top:10px">exit 0=一致、1=audit issue、2=設定・取得・実行error。</p>
+        </article>
+        <article class="card full">
+          <h3>対話確認：配置とdiffを見る</h3>
+          <pre><code>gh-skill-tui
+# r: rescan / u: scope / agent detail: diff</code></pre>
+          <p style="margin-top:10px">SHA由来の <code>↓</code> とcontent由来の <code>m</code> を区別して読む。</p>
+        </article>
+        <article class="card full">
+          <h3>GitHub CLI基準の更新候補</h3>
+          <pre><code>gh skill update --dry-run
+gh skill update --dry-run --dir .opencode/skills</code></pre>
+          <p style="margin-top:10px">これはtree SHA audit。content checkerの代替ではない。</p>
+        </article>
+        <article class="card full">
+          <h3>project policy例</h3>
+          <pre><code>source = "OWNER/private-skills"
+scope = "project"
+branch = "main"
+allowed_sources = ["owner/private-skills"]
+
+[check]
+ignore_skills = ["local-only", "tools/*"]</code></pre>
+        </article>
+      </div>
+
+      <h3 style="margin-top:28px">設定の優先順位</h3>
+      <div class="callout">
+        <strong>CLI flag</strong> → <strong>environment</strong> → <strong>project config</strong> →
+        <strong>user config</strong> → built-in default。
+        project側の <code>[check]</code> はchecker専用source/ref/pin/ignoreを上書きできる。
+      </div>
+    </section>
+
+    <section id="references">
+      <h2>実装の対応表</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>責務</th><th>主な実装</th></tr></thead>
+          <tbody>
+            <tr><td>source tree / blob取得</td><td><code>skills.go: loadSkills, loadLocalSkills, localGitShas</code></td></tr>
+            <tr><td>installed scan / metadata / normalization</td><td><code>status.go: scanInstalled, readInstalledSkill, normalizeSkillMD</code></td></tr>
+            <tr><td>content equivalence</td><td><code>status.go: skillMDEquivalent</code> / <code>tui.go: copyModified</code></td></tr>
+            <tr><td>provenance class</td><td><code>status.go: classify</code></td></tr>
+            <tr><td>configured source / badge</td><td><code>tui.go: copyFromConfiguredSource, badgeState</code></td></tr>
+            <tr><td>outside / promotion</td><td><code>local.go: buildLocalOnly, reconcileMergedOutsideCopies</code></td></tr>
+            <tr><td>content-authoritative audit</td><td><code>check.go: runSkillCheck, checkManagedCopy</code></td></tr>
+            <tr><td>physical destinations / install plan</td><td><code>targets.go: builtinInstallTargets, buildPlan</code></td></tr>
+            <tr><td>設定precedence</td><td><code>config.go</code> / <code>main.go: parseArgs</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="page">
+      この資料は仕様書というより、2026-07-16時点のコードから再構成した「現状の設計図」です。
+      behaviorを変更した場合は、状態matrixと「現在の非対称性」を先に更新すると全体が崩れにくくなります。
+    </div>
+  </footer>
+</body>
+</html>

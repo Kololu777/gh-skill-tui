@@ -107,6 +107,55 @@ func runSkillCheck(cfg config, projectRoot string) (checkReport, error) {
 		}
 	}
 
+	// Per-root lock files snapshot the state install operations left on
+	// disk. A usable entry answers "locally edited?" and "source moved?"
+	// separately; copies without one fall back to the content comparison.
+	locks := make(map[string]map[string]lockEntry)
+	for _, target := range targets {
+		if target.Scope != cfg.Scope || target.Err != "" {
+			continue
+		}
+		locks[target.Dir] = readLockFile(target.Dir)
+	}
+
+	// The check is content-authoritative: source tracking metadata is useful
+	// for identifying a copy, but an absent or stale tree SHA must not fail a
+	// copy whose files still match the configured source. Remote SKILL.md
+	// contents are normally loaded lazily by the TUI, so fetch the ones needed
+	// by this scope before doing the semantic frontmatter comparison. Copies
+	// whose lock entry already decides the verdict need no content at all.
+	if !sourceLocal {
+		needed := make(map[string]bool)
+		for _, target := range targets {
+			if target.Scope != cfg.Scope || target.Err != "" {
+				continue
+			}
+			for _, installed := range target.Skills {
+				if !belongsToConfiguredSource(installed, cfg.Source, sourceRoot) {
+					continue
+				}
+				key := normalizeSkillDir(installed.GhPath)
+				entry, ok := locks[target.Dir][installed.Name]
+				switch lockStatusFor(entry, ok, installed, key, expected[key]) {
+				case lockCurrent, lockOutdated:
+					continue
+				}
+				needed[key] = true
+			}
+		}
+		for i := range skills {
+			if !needed[skills[i].Dir()] {
+				continue
+			}
+			content, err := readSkillContent(cfg, ref, skills[i].Path)
+			if err != nil {
+				return checkReport{}, fmt.Errorf("load source content for %s: %w", skills[i].Dir(), err)
+			}
+			skills[i].Content = content
+		}
+		checker.skills = skills
+	}
+
 	for _, target := range targets {
 		if target.Scope != cfg.Scope {
 			continue
@@ -125,7 +174,7 @@ func runSkillCheck(cfg config, projectRoot string) (checkReport, error) {
 			}
 			if belongsToConfiguredSource(installed, cfg.Source, sourceRoot) {
 				report.Checked++
-				checkManagedCopy(&report, checker, installed, location, expected, sourceLocal, sourceRoot)
+				checkManagedCopy(&report, checker, installed, location, expected, sourceLocal, sourceRoot, locks[target.Dir])
 				continue
 			}
 			report.Issues = append(report.Issues, checkIssue{
@@ -147,7 +196,7 @@ func runSkillCheck(cfg config, projectRoot string) (checkReport, error) {
 	return report, nil
 }
 
-func checkManagedCopy(report *checkReport, checker model, installed installedSkill, location string, expected map[string]string, sourceLocal bool, sourceRoot string) {
+func checkManagedCopy(report *checkReport, checker model, installed installedSkill, location string, expected map[string]string, sourceLocal bool, sourceRoot string, locks map[string]lockEntry) {
 	key := installed.GhPath
 	if sourceLocal {
 		key = filepath.Clean(installed.LocalPath)
@@ -189,19 +238,49 @@ func checkManagedCopy(report *checkReport, checker model, installed installedSki
 		})
 		return
 	}
-	if installed.TreeSha == "" || installed.TreeSha != want {
+	entry, hasEntry := locks[installed.Name]
+	switch lockStatusFor(entry, hasEntry, installed, key, want) {
+	case lockCurrent:
+		return
+	case lockOutdated:
 		report.Issues = append(report.Issues, checkIssue{
 			Kind:     "outdated",
 			Skill:    displayInstalledSkill(installed),
 			Location: location,
-			Message:  fmt.Sprintf("installed tree %s does not match source tree %s", firstNonEmpty(installed.TreeSha, "<missing>"), want),
+			Message:  "installed copy is unchanged since install but the source has newer content",
 			Action:   updateAction(checker.cfg, normalizeSkillDir(installed.GhPath), sourceLocal),
 		})
 		return
+	case lockDirty:
+		// The copy no longer matches its install-time snapshot. Whether
+		// that matters is decided against the source: an update done
+		// outside the TUI leaves the lock stale but the copy current.
+		if !checker.copyModified(installed) {
+			return
+		}
+		if entry.TreeSha != want {
+			report.Issues = append(report.Issues, checkIssue{
+				Kind:     "conflict",
+				Skill:    displayInstalledSkill(installed),
+				Location: location,
+				Message:  "local edits and source updates have diverged since install",
+				Action:   "run gh-skill-tui, select this skill, then press p to send your edits upstream as a PR — or delete/reinstall this copy to take the newer source version",
+			})
+			return
+		}
+		report.Issues = append(report.Issues, checkIssue{
+			Kind:     "modified",
+			Skill:    displayInstalledSkill(installed),
+			Location: location,
+			Message:  "installed files were edited locally after install",
+			Action:   "run gh-skill-tui, select this skill, then press p to send your edits upstream as a PR — or reinstall with --force to discard them",
+		})
+		return
 	}
-	// Companion files can be checked without another network request. For
-	// remote sources SKILL.md itself is represented by the tree SHA; the TUI's
-	// richer lazy content comparison remains available for local-edit review.
+	// No usable lock entry: fall back to comparing content against the
+	// source revision. Tree SHA metadata is deliberately not part of this
+	// result — it may be absent on older installs even though every
+	// installed file is current.
 	if checker.copyModified(installed) {
 		report.Issues = append(report.Issues, checkIssue{
 			Kind:     "modified",
