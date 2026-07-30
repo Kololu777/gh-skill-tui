@@ -3,7 +3,9 @@ ACTIONLINT_VERSION ?= v1.7.12
 
 GO_FILES := $(shell find . -type f -name '*.go' -not -path './vendor/*')
 
-.PHONY: format fmt format-check lint vet test build actionlint yaml-lint check tools
+COVERAGE_FILE ?= coverage.out
+
+.PHONY: format fmt format-check lint vet test coverage build actionlint yaml-lint check tools
 
 format fmt:
 	gofmt -w $(GO_FILES)
@@ -24,6 +26,10 @@ vet:
 test:
 	go test ./...
 
+coverage:
+	go test -count=1 -covermode=atomic -coverprofile=$(COVERAGE_FILE) ./...
+	go tool cover -func=$(COVERAGE_FILE)
+
 build:
 	go build ./...
 
@@ -33,7 +39,7 @@ actionlint:
 yaml-lint:
 	yamllint .github
 
-check: format-check vet lint test build actionlint yaml-lint
+check: format-check vet lint coverage build actionlint yaml-lint
 
 tools:
 	go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)

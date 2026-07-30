@@ -2,6 +2,10 @@
 
 ## Latest Changes
 
+## 0.4.4 (2026-07-30)
+
+* chore(ci): add coverage target and use it in CI/test pipeline. PR [#26](https://github.com/Kololu777/gh-skill-tui/pull/26) by [@Kololu777](https://github.com/Kololu777).
+
 ## 0.4.3 (2026-07-16)
 
 * fix(tui): promote merged outside skills to managed. PR [#23](https://github.com/Kololu777/gh-skill-tui/pull/23) by [@Kololu777](https://github.com/Kololu777).
