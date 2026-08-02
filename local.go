@@ -111,8 +111,7 @@ func sameFileSet(source, installed map[string]string) bool {
 // copies whose tracked path no longer exists upstream.
 // sourceKeys holds the source skills under the same key convention as
 // installedSkill.Key().
-func buildLocalOnly(targets []scanTarget, skills []skill, sourceKeys map[string]bool, belongsToSource ...func(installedSkill) bool) []localOnlySkill {
-	_ = skills // kept in the signature for callers while the model is migrated
+func buildLocalOnly(targets []scanTarget, _ []skill, sourceKeys map[string]bool, belongsToSource ...func(installedSkill) bool) []localOnlySkill {
 	belongs := func(inst installedSkill) bool { return inst.Class == classManaged }
 	if len(belongsToSource) > 0 && belongsToSource[0] != nil {
 		belongs = belongsToSource[0]

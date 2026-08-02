@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -344,7 +345,7 @@ func TestBuildPlanDedupsSharedDestination(t *testing.T) {
 	// A force override on the skipped alias still applies to the one physical
 	// destination executed through the canonical agent target.
 	entries, _ = buildPlan(cfg, "gh", []string{"skills/a/SKILL.md"}, allInstallTargets(), marked, "project", false, "/proj", "", nil, nil, map[string]bool{"github-copilot": true})
-	if len(entries) != 1 || !containsStr(entries[0].Args, "--force") {
+	if len(entries) != 1 || !slices.Contains(entries[0].Args, "--force") {
 		t.Fatalf("shared-destination force was lost: %+v", entries)
 	}
 }
@@ -686,7 +687,7 @@ func TestBadgeStateOutdated(t *testing.T) {
 	m.selected[target.Path] = true
 	updatePlan := press(t, m, "i")
 	if len(updatePlan.plan) != 1 || updatePlan.plan[0].Action != "update" ||
-		!containsStr(updatePlan.plan[0].Args, "--force") {
+		!slices.Contains(updatePlan.plan[0].Args, "--force") {
 		t.Fatalf("outdated update must be non-interactive: %+v", updatePlan.plan)
 	}
 
@@ -900,7 +901,7 @@ func TestModifiedInstallRequiresExplicitOverwrite(t *testing.T) {
 	if !m.confirmMode || len(m.plan) != 1 || m.plan[0].Action != "overwrite" {
 		t.Fatalf("blocked overwrite plan = %+v", m.plan)
 	}
-	if len(m.planBlocks) != 1 || containsStr(m.plan[0].Args, "--force") {
+	if len(m.planBlocks) != 1 || slices.Contains(m.plan[0].Args, "--force") {
 		t.Fatalf("overwrite must be blocked before force: blocks=%v args=%v", m.planBlocks, m.plan[0].Args)
 	}
 
@@ -908,7 +909,7 @@ func TestModifiedInstallRequiresExplicitOverwrite(t *testing.T) {
 	m.agentForce["claude-code"] = true
 	m = press(t, m, "i")
 	if len(m.planBlocks) != 0 || len(m.plan) != 1 || m.plan[0].Action != "overwrite" ||
-		!containsStr(m.plan[0].Args, "--force") {
+		!slices.Contains(m.plan[0].Args, "--force") {
 		t.Fatalf("explicit overwrite plan = %+v blocks=%v", m.plan, m.planBlocks)
 	}
 	if len(m.planWarns) != 1 || !strings.Contains(m.planWarns[0], "local edits will be overwritten") {
@@ -1493,7 +1494,7 @@ func TestAllowedButDifferentRepositoryIsStillOutside(t *testing.T) {
 	m.selected[target.Path] = true
 	m = press(t, m, "i")
 	if len(m.planBlocks) != 0 || len(m.plan) != 1 || m.plan[0].Action != "adopt" ||
-		!containsStr(m.plan[0].Args, "--force") {
+		!slices.Contains(m.plan[0].Args, "--force") {
 		t.Fatalf("adopt plan = %+v blocks=%v", m.plan, m.planBlocks)
 	}
 	m = press(t, m, "esc", "d")
@@ -1656,7 +1657,7 @@ func TestSourceCollisionBuildsExplicitAdoptPlan(t *testing.T) {
 		t.Fatalf("adopt plan = %+v blocks=%v status=%q", m.plan, m.planBlocks, m.status)
 	}
 	entry := m.plan[0]
-	if entry.Action != "adopt" || !containsStr(entry.Args, "--force") {
+	if entry.Action != "adopt" || !slices.Contains(entry.Args, "--force") {
 		t.Fatalf("entry = %+v", entry)
 	}
 	if len(m.planWarns) != 1 || !strings.Contains(m.planWarns[0], "outside copy will be replaced") {
@@ -1705,7 +1706,7 @@ func TestLocalOnlyCopiesPanel(t *testing.T) {
 	}
 	// at user scope the claude-code cursor picks the claude copy
 	mu := press(t, m, "u")
-	if _, cp, ok := mu.currentLocalCopy(); !ok || cp.Scope != "user" || !containsStr(cp.Agents, "claude") {
+	if _, cp, ok := mu.currentLocalCopy(); !ok || cp.Scope != "user" || !slices.Contains(cp.Agents, "claude") {
 		t.Fatalf("user-scope copy = %+v (ok=%v)", cp, ok)
 	}
 	// agent marks are inert in outside mode
@@ -2341,7 +2342,7 @@ func TestProjectConfigOverridesGlobalAndPins(t *testing.T) {
 func TestBuildPlanAddsConfiguredPin(t *testing.T) {
 	cfg := config{Source: "Owner/Repo", Pin: "deadbeef"}
 	entries, _ := buildPlan(cfg, "gh", []string{"skills/demo/SKILL.md"}, allInstallTargets(), map[string]bool{"codex": true}, "project", false, "/proj", "", nil, nil, nil)
-	if len(entries) != 1 || !containsStr(entries[0].Args, "--pin") || !containsStr(entries[0].Args, "deadbeef") {
+	if len(entries) != 1 || !slices.Contains(entries[0].Args, "--pin") || !slices.Contains(entries[0].Args, "deadbeef") {
 		t.Fatalf("configured pin missing: %+v", entries)
 	}
 }

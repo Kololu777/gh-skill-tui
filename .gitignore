@@ -5,3 +5,8 @@ coverage.out
 .worktrees/
 .codex-homes/
 target
+.agents
+.claude
+.codex
+.memoc
+.opencode

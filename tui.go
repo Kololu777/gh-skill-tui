@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -594,11 +595,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "i":
 		return m.openInstallPlan()
 	case "u":
-		if m.scope == "user" {
-			m.scope = "project"
-		} else {
-			m.scope = "user"
-		}
+		m.scope = otherScope(m.scope)
 		m.status = "scope: " + m.scope
 		// the outside section is scoped, so the visible set changes
 		m.refreshVisible()
@@ -989,7 +986,7 @@ func (m model) resolveOutsideCopy(lo localOnlySkill) (localCopy, string) {
 	if len(m.installTargets) > 0 {
 		p := m.installTargets[max(0, min(m.cursors[focusAgents], len(m.installTargets)-1))]
 		for _, cp := range copies {
-			if containsStr(cp.Agents, p.Short) {
+			if slices.Contains(cp.Agents, p.Short) {
 				return cp, ""
 			}
 		}
@@ -1468,9 +1465,7 @@ func (m model) skillIndicator(s skill) string {
 		case badgeModified:
 			installed++
 			modified++
-		case badgeForeign:
-			outside = true
-		case badgeUntracked:
+		case badgeForeign, badgeUntracked:
 			outside = true
 		}
 	}
@@ -1816,9 +1811,7 @@ func (m model) agentAction(p installTarget, ctx []skill) (action string, actionS
 		case badgeModified:
 			installed++
 			modified++
-		case badgeForeign:
-			outside = true
-		case badgeUntracked:
+		case badgeForeign, badgeUntracked:
 			outside = true
 		}
 	}
@@ -1929,7 +1922,7 @@ func (m model) agentRows(cw int) []prow {
 		for _, p := range m.installTargets {
 			has := false
 			for _, c := range copies {
-				if containsStr(c.Agents, p.Short) {
+				if slices.Contains(c.Agents, p.Short) {
 					has = true
 					break
 				}
@@ -2328,9 +2321,7 @@ func (m model) skillInstallSummary(s skill, w int) []string {
 			parts = append(parts, p.Name+":↓")
 		case badgeModified:
 			parts = append(parts, p.Name+":m")
-		case badgeForeign:
-			parts = append(parts, p.Name+":O")
-		case badgeUntracked:
+		case badgeForeign, badgeUntracked:
 			parts = append(parts, p.Name+":O")
 		default:
 			parts = append(parts, p.Name+":-")
@@ -2460,7 +2451,7 @@ func (m model) agentDetail(w int) (string, []string) {
 	)
 	found := false
 	for _, t := range m.targets {
-		if !containsStr(t.Agents, p.Short) {
+		if !slices.Contains(t.Agents, p.Short) {
 			continue
 		}
 		found = true
@@ -2582,15 +2573,6 @@ func (m model) statusDetail(w int) (string, []string) {
 	lines = append(lines, "")
 	lines = append(lines, classLegend()...)
 	return title, lines
-}
-
-func containsStr(list []string, s string) bool {
-	for _, v := range list {
-		if v == s {
-			return true
-		}
-	}
-	return false
 }
 
 // --- box drawing ---

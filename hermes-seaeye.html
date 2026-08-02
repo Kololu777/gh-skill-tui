@@ -1,0 +1,762 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="hermes-seaeye[bot] が Hermes の Skills Hub を更新・監視する流れ"
+    />
+    <title>hermes-seaeye[bot] / Automation Map</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #07111f;
+        --bg-soft: #0b192b;
+        --panel: rgba(13, 30, 49, 0.84);
+        --panel-strong: #102941;
+        --line: rgba(157, 190, 219, 0.18);
+        --text: #edf6ff;
+        --muted: #9db5ca;
+        --cyan: #65e6e0;
+        --blue: #79a9ff;
+        --lime: #c9f36d;
+        --amber: #ffc978;
+        --danger: #ff8d96;
+        --shadow: 0 24px 70px rgba(0, 0, 0, 0.3);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        min-width: 320px;
+        margin: 0;
+        color: var(--text);
+        background:
+          radial-gradient(circle at 15% -10%, rgba(101, 230, 224, 0.14), transparent 33rem),
+          radial-gradient(circle at 90% 0%, rgba(121, 169, 255, 0.13), transparent 30rem),
+          var(--bg);
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", sans-serif;
+        line-height: 1.6;
+      }
+
+      a {
+        color: inherit;
+      }
+
+      .shell {
+        width: min(1180px, calc(100% - 40px));
+        margin: 0 auto;
+      }
+
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 20px;
+        padding: 28px 0;
+      }
+
+      .brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 11px;
+        color: var(--text);
+        font-size: 0.9rem;
+        font-weight: 750;
+        letter-spacing: 0.02em;
+        text-decoration: none;
+      }
+
+      .brand-mark {
+        display: grid;
+        width: 29px;
+        height: 29px;
+        place-items: center;
+        color: var(--bg);
+        background: var(--cyan);
+        border-radius: 9px;
+        box-shadow: 0 0 26px rgba(101, 230, 224, 0.34);
+        font-size: 0.75rem;
+        font-weight: 900;
+      }
+
+      .topbar nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .topbar nav a {
+        padding: 7px 11px;
+        color: var(--muted);
+        border: 1px solid transparent;
+        border-radius: 999px;
+        font-size: 0.8rem;
+        text-decoration: none;
+        transition: 160ms ease;
+      }
+
+      .topbar nav a:hover {
+        color: var(--text);
+        border-color: var(--line);
+        background: rgba(255, 255, 255, 0.04);
+      }
+
+      .hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1.25fr) minmax(280px, 0.75fr);
+        align-items: end;
+        gap: 50px;
+        padding: 72px 0 65px;
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        margin: 0 0 18px;
+        color: var(--cyan);
+        font-size: 0.75rem;
+        font-weight: 800;
+        letter-spacing: 0.15em;
+        text-transform: uppercase;
+      }
+
+      .eyebrow::before {
+        width: 7px;
+        height: 7px;
+        background: var(--cyan);
+        border-radius: 50%;
+        box-shadow: 0 0 0 5px rgba(101, 230, 224, 0.11);
+        content: "";
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin-top: 0;
+      }
+
+      h1 {
+        max-width: 760px;
+        margin-bottom: 22px;
+        font-size: clamp(2.7rem, 7vw, 5.7rem);
+        font-weight: 800;
+        letter-spacing: -0.075em;
+        line-height: 0.98;
+      }
+
+      h1 span {
+        color: var(--cyan);
+      }
+
+      .lede {
+        max-width: 650px;
+        margin-bottom: 0;
+        color: var(--muted);
+        font-size: clamp(1rem, 2vw, 1.18rem);
+      }
+
+      .hero-note {
+        padding: 23px;
+        border: 1px solid var(--line);
+        border-radius: 22px;
+        background: linear-gradient(145deg, rgba(17, 47, 70, 0.84), rgba(11, 25, 43, 0.8));
+        box-shadow: var(--shadow);
+      }
+
+      .hero-note strong {
+        display: block;
+        margin-bottom: 7px;
+        color: var(--lime);
+        font-size: 0.78rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .hero-note p {
+        margin-bottom: 0;
+        color: var(--text);
+        font-size: 1.04rem;
+      }
+
+      .pills {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 9px;
+        margin-top: 24px;
+      }
+
+      .pill {
+        padding: 6px 10px;
+        color: var(--muted);
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.035);
+        font-size: 0.76rem;
+      }
+
+      .section-heading {
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        gap: 25px;
+        margin: 10px 0 18px;
+      }
+
+      .section-heading h2 {
+        margin-bottom: 0;
+        font-size: clamp(1.45rem, 3vw, 2.1rem);
+        letter-spacing: -0.04em;
+      }
+
+      .section-heading p {
+        max-width: 470px;
+        margin-bottom: 0;
+        color: var(--muted);
+        font-size: 0.91rem;
+        text-align: right;
+      }
+
+      .diagram-panel {
+        overflow: hidden;
+        padding: clamp(16px, 3vw, 32px);
+        border: 1px solid var(--line);
+        border-radius: 26px;
+        background: rgba(9, 22, 38, 0.78);
+        box-shadow: var(--shadow);
+      }
+
+      .diagram-panel::before {
+        display: block;
+        width: 100%;
+        height: 3px;
+        margin-bottom: 22px;
+        background: linear-gradient(90deg, var(--cyan), var(--blue), transparent);
+        border-radius: 999px;
+        content: "";
+      }
+
+      .mermaid {
+        min-height: 430px;
+        margin: 0;
+        text-align: center;
+      }
+
+      .mermaid svg {
+        max-width: 100%;
+        height: auto;
+      }
+
+      .diagram-fallback {
+        display: none;
+        padding: 16px;
+        color: var(--muted);
+        border: 1px dashed var(--line);
+        border-radius: 14px;
+      }
+
+      .detail-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 14px;
+        margin: 20px 0 82px;
+      }
+
+      .card {
+        min-height: 190px;
+        padding: 22px;
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        background: var(--panel);
+      }
+
+      .card-number {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 23px;
+        color: var(--muted);
+        font-size: 0.74rem;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      .card-number::after {
+        width: 9px;
+        height: 9px;
+        border: 1px solid currentColor;
+        border-radius: 50%;
+        content: "";
+      }
+
+      .card:nth-child(1) .card-number {
+        color: var(--cyan);
+      }
+
+      .card:nth-child(2) .card-number {
+        color: var(--blue);
+      }
+
+      .card:nth-child(3) .card-number {
+        color: var(--amber);
+      }
+
+      .card h3 {
+        margin-bottom: 9px;
+        font-size: 1.04rem;
+      }
+
+      .card p {
+        margin-bottom: 0;
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+
+      .timeline-section {
+        display: grid;
+        grid-template-columns: 0.65fr 1.35fr;
+        gap: 60px;
+        margin-bottom: 82px;
+      }
+
+      .timeline-intro p {
+        margin-bottom: 0;
+        color: var(--muted);
+      }
+
+      .timeline {
+        position: relative;
+        display: grid;
+        gap: 22px;
+        padding-left: 28px;
+      }
+
+      .timeline::before {
+        position: absolute;
+        top: 8px;
+        bottom: 8px;
+        left: 5px;
+        width: 1px;
+        background: linear-gradient(var(--cyan), var(--blue), var(--danger));
+        content: "";
+      }
+
+      .event {
+        position: relative;
+      }
+
+      .event::before {
+        position: absolute;
+        top: 6px;
+        left: -28px;
+        width: 11px;
+        height: 11px;
+        border: 3px solid var(--bg);
+        border-radius: 50%;
+        background: var(--cyan);
+        box-shadow: 0 0 0 1px var(--cyan);
+        content: "";
+      }
+
+      .event:nth-child(2)::before {
+        background: var(--blue);
+        box-shadow: 0 0 0 1px var(--blue);
+      }
+
+      .event:nth-child(3)::before {
+        background: var(--danger);
+        box-shadow: 0 0 0 1px var(--danger);
+      }
+
+      .event time {
+        display: block;
+        margin-bottom: 3px;
+        color: var(--cyan);
+        font-family: "SFMono-Regular", Consolas, monospace;
+        font-size: 0.75rem;
+      }
+
+      .event h3 {
+        margin-bottom: 3px;
+        font-size: 1rem;
+      }
+
+      .event p {
+        margin-bottom: 0;
+        color: var(--muted);
+        font-size: 0.88rem;
+      }
+
+      .source-section {
+        margin-bottom: 82px;
+      }
+
+      .source-list {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .source-link {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 14px 15px;
+        color: var(--muted);
+        border: 1px solid var(--line);
+        border-radius: 13px;
+        background: rgba(255, 255, 255, 0.025);
+        font-size: 0.82rem;
+        text-decoration: none;
+        transition: 160ms ease;
+      }
+
+      .source-link:hover {
+        color: var(--text);
+        border-color: rgba(101, 230, 224, 0.48);
+        background: rgba(101, 230, 224, 0.07);
+        transform: translateY(-2px);
+      }
+
+      .source-link::after {
+        color: var(--cyan);
+        content: "↗";
+        font-size: 1rem;
+      }
+
+      .code-section {
+        margin-bottom: 70px;
+      }
+
+      details {
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 17px;
+        background: rgba(255, 255, 255, 0.025);
+      }
+
+      summary {
+        padding: 16px 18px;
+        cursor: pointer;
+        color: var(--text);
+        font-size: 0.86rem;
+        font-weight: 700;
+      }
+
+      summary::marker {
+        color: var(--cyan);
+      }
+
+      pre {
+        overflow-x: auto;
+        margin: 0;
+        padding: 0 18px 18px;
+        color: #b9d2e8;
+        font: 0.78rem/1.65 "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      }
+
+      footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 20px;
+        padding: 26px 0 35px;
+        color: var(--muted);
+        border-top: 1px solid var(--line);
+        font-size: 0.78rem;
+      }
+
+      footer a {
+        color: var(--cyan);
+        text-decoration: none;
+      }
+
+      footer a:hover {
+        text-decoration: underline;
+      }
+
+      @media (max-width: 850px) {
+        .hero,
+        .timeline-section {
+          grid-template-columns: 1fr;
+          gap: 30px;
+        }
+
+        .detail-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .source-list {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .section-heading {
+          display: block;
+        }
+
+        .section-heading p {
+          margin-top: 8px;
+          text-align: left;
+        }
+      }
+
+      @media (max-width: 560px) {
+        .shell {
+          width: min(100% - 26px, 1180px);
+        }
+
+        .topbar {
+          align-items: flex-start;
+          flex-direction: column;
+          padding: 18px 0;
+        }
+
+        .hero {
+          padding: 48px 0 48px;
+        }
+
+        h1 {
+          font-size: clamp(2.8rem, 16vw, 4.6rem);
+        }
+
+        .source-list {
+          grid-template-columns: 1fr;
+        }
+
+        .diagram-panel {
+          padding: 12px;
+        }
+
+        .mermaid {
+          min-height: 300px;
+        }
+
+        footer {
+          align-items: flex-start;
+          flex-direction: column;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <header class="topbar">
+        <a class="brand" href="#top" aria-label="ページの先頭へ">
+          <span class="brand-mark">HS</span>
+          <span>hermes-seaeye / automation map</span>
+        </a>
+        <nav aria-label="ページ内ナビゲーション">
+          <a href="#flow">全体像</a>
+          <a href="#timing">いつ動く？</a>
+          <a href="#sources">実装を見る</a>
+        </nav>
+      </header>
+
+      <main id="top">
+        <section class="hero" aria-labelledby="page-title">
+          <div>
+            <p class="eyebrow">GitHub App / trusted automation</p>
+            <h1 id="page-title">Skills Hubを、<span>静かに</span>更新する。</h1>
+            <p class="lede">
+              hermes-seaeye[bot] はスキルを実行するAIではなく、外部のスキル情報を集めて、
+              Hermesのカタログとドキュメントを更新・監視する自動化の実行主体です。
+            </p>
+            <div class="pills" aria-label="特徴">
+              <span class="pill">metadata catalog</span>
+              <span class="pill">1-hour token</span>
+              <span class="pill">trusted-automation</span>
+            </div>
+          </div>
+          <aside class="hero-note">
+            <strong>短く言うと</strong>
+            <p>収集 → JSON化 → ドキュメント生成 → 公開 → ヘルスチェック</p>
+          </aside>
+        </section>
+
+        <section id="flow" aria-labelledby="flow-title">
+          <div class="section-heading">
+            <h2 id="flow-title">処理の流れ</h2>
+            <p>点線は、GitHub APIやIssue作成のためにBotの短期トークンを使う箇所。</p>
+          </div>
+          <div class="diagram-panel">
+            <div id="diagram" class="mermaid" role="img" aria-label="Skills Hubの自動更新フロー"></div>
+            <p class="diagram-fallback">
+              Mermaidの読み込みに失敗しました。下の「図のソース」を開くと、同じフローをテキストで確認できます。
+            </p>
+          </div>
+        </section>
+
+        <section class="detail-grid" aria-label="処理の要点">
+          <article class="card">
+            <div class="card-number">01 / collect</div>
+            <h3>スキル本体ではなく、まずメタデータ</h3>
+            <p>名前・説明・配布元・URLなどを複数のカタログから集め、一覧に載せるための情報を整えます。</p>
+          </article>
+          <article class="card">
+            <div class="card-number">02 / publish</div>
+            <h3>公式サイトの一覧を再生成</h3>
+            <p>健康なインデックスを使ってスキルページやカタログを生成し、DocusaurusでGitHub Pagesへ公開します。</p>
+          </article>
+          <article class="card">
+            <div class="card-number">03 / watch</div>
+            <h3>壊れたらWatchdogが知らせる</h3>
+            <p>古さ・JSONの形・ソースごとの件数・全体件数を確認し、異常時だけIssueを作成または追記します。</p>
+          </article>
+        </section>
+
+        <section id="timing" class="timeline-section" aria-labelledby="timing-title">
+          <div class="timeline-intro">
+            <p class="eyebrow">cadence</p>
+            <h2 id="timing-title">いつ、何が動く？</h2>
+            <p>更新と監視を別スケジュールにすることで、生成が止まっても早く気づけます。</p>
+          </div>
+          <div class="timeline">
+            <article class="event">
+              <time>毎日 06:00 / 18:00 UTC</time>
+              <h3>Skills indexをビルド</h3>
+              <p>外部ソースをクロールして <code>skills-index.json</code> を生成。スケジュール実行ではデプロイも起動します。</p>
+            </article>
+            <article class="event">
+              <time>release / main変更 / 手動実行</time>
+              <h3>ドキュメントサイトをデプロイ</h3>
+              <p>最新の健康なインデックスを使い、スキルページとカタログを再生成して公開します。</p>
+            </article>
+            <article class="event">
+              <time>4時間ごと</time>
+              <h3>Freshness Watchdog</h3>
+              <p>26時間以上古い、件数が急減した、取得できない——そんな時だけ <code>[skills-index-watchdog]</code> Issueを通知します。</p>
+            </article>
+          </div>
+        </section>
+
+        <section id="sources" class="source-section" aria-labelledby="sources-title">
+          <div class="section-heading">
+            <h2 id="sources-title">実装を読む</h2>
+            <p>この図の根拠になっている、Hermes Agentのワークフロー。</p>
+          </div>
+          <div class="source-list">
+            <a class="source-link" href="https://github.com/NousResearch/hermes-agent/blob/main/.github/workflows/skills-index.yml" target="_blank" rel="noreferrer">Skills index build</a>
+            <a class="source-link" href="https://github.com/NousResearch/hermes-agent/blob/main/.github/workflows/deploy-site.yml" target="_blank" rel="noreferrer">Docs deploy</a>
+            <a class="source-link" href="https://github.com/NousResearch/hermes-agent/blob/main/.github/workflows/skills-index-freshness.yml" target="_blank" rel="noreferrer">Freshness watchdog</a>
+            <a class="source-link" href="https://github.com/NousResearch/hermes-agent/blob/main/.github/actions/get-app-token/action.yml" target="_blank" rel="noreferrer">App token action</a>
+          </div>
+        </section>
+
+        <section class="code-section" aria-label="Mermaidソース">
+          <details>
+            <summary>図のソースを表示</summary>
+            <pre id="diagram-source"></pre>
+          </details>
+        </section>
+      </main>
+
+      <footer>
+        <span>hermes-seaeye[bot] is plumbing, not magic.</span>
+        <a href="https://github.com/NousResearch/hermes-agent" target="_blank" rel="noreferrer">NousResearch / hermes-agent ↗</a>
+      </footer>
+    </div>
+
+    <script type="module">
+      import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+
+      const diagram = `
+flowchart LR
+  subgraph SOURCES["01 収集"]
+    S1["skills.sh<br/>LobeHub / ClawHub"]
+    S2["Official / GitHub<br/>browse.sh"]
+  end
+
+  subgraph BUILD["02 カタログ化"]
+    B["build_skills_index.py"]
+    J[("skills-index.json")]
+  end
+
+  subgraph PUBLISH["03 公開"]
+    X["extract-skills.py"]
+    G["generate-skill-docs.py"]
+    D["Docusaurus build"]
+    H["Skills Hub<br/>GitHub Pages"]
+  end
+
+  subgraph WATCH["04 監視"]
+    C{"4時間ごとに<br/>Freshness check"}
+    OK["healthy<br/>何もしない"]
+    BAD["stale / missing / degraded"]
+    I["Issueを作成 or 追記"]
+  end
+
+  APP["hermes-seaeye[bot]<br/>GitHub App<br/>1-hour token"]
+
+  S1 --> B
+  S2 --> B
+  B --> J
+  J --> X --> G --> D --> H
+  J --> C
+  C -->|"OK"| OK
+  C -->|"異常"| BAD --> I
+  APP -. "GitHub API / workflow / issue" .-> B
+  APP -. "認証" .-> I
+
+  classDef source fill:#102941,stroke:#65e6e0,color:#edf6ff
+  classDef build fill:#17294d,stroke:#79a9ff,color:#edf6ff
+  classDef publish fill:#173a3d,stroke:#c9f36d,color:#edf6ff
+  classDef watch fill:#3b2530,stroke:#ff8d96,color:#edf6ff
+  classDef app fill:#3c2f20,stroke:#ffc978,color:#fff4dc
+  class S1,S2 source
+  class B,J build
+  class X,G,D,H publish
+  class C,OK,BAD,I watch
+  class APP app
+`;
+
+      const diagramElement = document.getElementById("diagram");
+      const sourceElement = document.getElementById("diagram-source");
+      const fallback = document.querySelector(".diagram-fallback");
+      sourceElement.textContent = diagram.trim();
+
+      mermaid.initialize({
+        startOnLoad: false,
+        securityLevel: "strict",
+        theme: "base",
+        themeVariables: {
+          background: "#091626",
+          primaryColor: "#102941",
+          primaryTextColor: "#edf6ff",
+          primaryBorderColor: "#65e6e0",
+          lineColor: "#8ca7bd",
+          secondaryColor: "#17294d",
+          tertiaryColor: "#173a3d",
+          fontFamily: "Inter, system-ui, sans-serif",
+          fontSize: "15px",
+        },
+        flowchart: {
+          curve: "basis",
+          htmlLabels: true,
+          padding: 18,
+          useMaxWidth: true,
+        },
+      });
+
+      diagramElement.textContent = diagram;
+
+      try {
+        await mermaid.run({ nodes: [diagramElement] });
+      } catch (error) {
+        console.error("Mermaid rendering failed", error);
+        fallback.style.display = "block";
+      }
+    </script>
+  </body>
+</html>

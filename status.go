@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -78,22 +79,23 @@ type skillMeta struct {
 func parseSkillMetadata(content string) skillMeta {
 	var meta skillMeta
 	lines := strings.Split(content, "\n")
-	if len(lines) == 0 || strings.TrimRight(lines[0], "\r") != "---" {
+	if strings.TrimRight(lines[0], "\r") != "---" {
 		return meta
+	}
+	fields := map[string]*string{
+		"github-repo:":     &meta.Repo,
+		"github-path:":     &meta.Path,
+		"github-ref:":      &meta.Ref,
+		"github-tree-sha:": &meta.GhTreeSha,
+		"local-path:":      &meta.LocalPath,
+		"tui-tree-sha:":    &meta.TuiTreeSha,
 	}
 	for _, line := range lines[1:] {
 		t := strings.TrimSpace(strings.TrimRight(line, "\r"))
 		if t == "---" {
 			break
 		}
-		for key, dst := range map[string]*string{
-			"github-repo:":     &meta.Repo,
-			"github-path:":     &meta.Path,
-			"github-ref:":      &meta.Ref,
-			"github-tree-sha:": &meta.GhTreeSha,
-			"local-path:":      &meta.LocalPath,
-			"tui-tree-sha:":    &meta.TuiTreeSha,
-		} {
+		for key, dst := range fields {
 			if strings.HasPrefix(t, key) {
 				*dst = strings.Trim(strings.TrimSpace(strings.TrimPrefix(t, key)), `"'`)
 			}
@@ -124,10 +126,8 @@ func repoSlug(repo string) string {
 func classify(meta skillMeta, allowed []string, allowedRoots []string) skillClass {
 	if meta.Repo != "" {
 		slug := repoSlug(meta.Repo)
-		for _, a := range allowed {
-			if slug == a {
-				return classManaged
-			}
+		if slices.Contains(allowed, slug) {
+			return classManaged
 		}
 		return classForeign
 	}
@@ -278,10 +278,7 @@ func readInstalledSkill(root, rel string, allowed []string, allowedRoots []strin
 		return installedSkill{}, false
 	}
 	meta := parseSkillMetadata(string(content))
-	treeSha := meta.GhTreeSha
-	if meta.TuiTreeSha != "" {
-		treeSha = meta.TuiTreeSha
-	}
+	treeSha := firstNonEmpty(meta.TuiTreeSha, meta.GhTreeSha)
 	dir := filepath.Join(root, filepath.FromSlash(rel))
 	return installedSkill{
 		Name:      rel,
@@ -310,7 +307,7 @@ var injectedMetaKeys = []string{
 // empty, so the result matches the pristine source file.
 func normalizeSkillMD(content string) string {
 	lines := strings.Split(content, "\n")
-	if len(lines) == 0 || strings.TrimRight(lines[0], "\r") != "---" {
+	if strings.TrimRight(lines[0], "\r") != "---" {
 		return content
 	}
 	end := -1
@@ -360,7 +357,7 @@ func normalizeSkillMD(content string) string {
 // markers) and the remaining body lines.
 func splitFrontmatter(content string) (fm []string, body []string, ok bool) {
 	lines := strings.Split(content, "\n")
-	if len(lines) == 0 || strings.TrimRight(lines[0], "\r") != "---" {
+	if strings.TrimRight(lines[0], "\r") != "---" {
 		return nil, lines, false
 	}
 	for i := 1; i < len(lines); i++ {

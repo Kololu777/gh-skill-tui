@@ -98,10 +98,7 @@ func argsForProgram(program string, args []string) []string {
 	if len(args) > 0 && args[0] == "check" {
 		return args
 	}
-	out := make([]string, 0, len(args)+1)
-	out = append(out, "check")
-	out = append(out, args...)
-	return out
+	return append([]string{"check"}, args...)
 }
 
 var errHelp = errors.New("help requested")
@@ -157,10 +154,6 @@ func parseArgs(args []string) (config, error) {
 	refSet := false
 	pinSet := false
 
-	valueInstallFlags := map[string]bool{
-		"--pin": true,
-	}
-
 	takeValue := func(i *int, name string) (string, error) {
 		*i++
 		if *i >= len(args) {
@@ -186,14 +179,7 @@ func parseArgs(args []string) (config, error) {
 			// already consumed by configPathFromArgs before parsing
 			i++
 		case strings.HasPrefix(arg, "--config="):
-		case arg == "--ref":
-			v, err := takeValue(&i, arg)
-			if err != nil {
-				return cfg, err
-			}
-			cfg.Ref = v
-			refSet = true
-		case arg == "--branch":
+		case arg == "--ref" || arg == "--branch":
 			v, err := takeValue(&i, arg)
 			if err != nil {
 				return cfg, err
@@ -265,12 +251,10 @@ func parseArgs(args []string) (config, error) {
 			commandSet = true
 		case strings.HasPrefix(arg, "-"):
 			cfg.InstallArgs = append(cfg.InstallArgs, arg)
-			if valueInstallFlags[arg] && i+1 < len(args) {
+			if arg == "--pin" && i+1 < len(args) {
 				i++
-				if arg == "--pin" {
-					cfg.Pin = args[i]
-					pinSet = true
-				}
+				cfg.Pin = args[i]
+				pinSet = true
 				cfg.InstallArgs = append(cfg.InstallArgs, args[i])
 			}
 		case !commandSet && !sourceSet:

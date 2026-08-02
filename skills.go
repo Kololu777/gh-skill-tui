@@ -257,11 +257,18 @@ func defaultRef(source string) (string, error) {
 }
 
 func runGh(args ...string) (string, error) {
+	return runGhCommand(nil, args...)
+}
+
+func runGhCommand(stdin *string, args ...string) (string, error) {
 	gh, err := commandPath("gh")
 	if err != nil {
 		return "", err
 	}
 	cmd := exec.Command(gh, args...)
+	if stdin != nil {
+		cmd.Stdin = strings.NewReader(*stdin)
+	}
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -308,23 +315,7 @@ func runGitFull(dir string, extraEnv []string, stdin string, args ...string) (st
 
 // runGhInput runs gh with a request body on stdin (for --input -).
 func runGhInput(stdin string, args ...string) (string, error) {
-	gh, err := commandPath("gh")
-	if err != nil {
-		return "", err
-	}
-	cmd := exec.Command(gh, args...)
-	cmd.Stdin = strings.NewReader(stdin)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		msg := strings.TrimSpace(stderr.String())
-		if msg == "" {
-			msg = err.Error()
-		}
-		return "", fmt.Errorf("gh %s: %s", strings.Join(args, " "), msg)
-	}
-	return stdout.String(), nil
+	return runGhCommand(&stdin, args...)
 }
 
 func escapePath(path string) string {

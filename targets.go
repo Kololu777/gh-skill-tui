@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -100,12 +101,7 @@ func sourceApproved(source string, allowed []string) bool {
 		return true
 	}
 	slug := strings.ToLower(strings.TrimSpace(source))
-	for _, a := range allowed {
-		if slug == a {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(allowed, slug)
 }
 
 type planEntry struct {

@@ -286,41 +286,43 @@ func updateAction(cfg config, skillPath string, sourceLocal bool) string {
 }
 
 func renderCheckReport(out io.Writer, report checkReport) error {
+	writef := func(format string, args ...any) error {
+		_, err := fmt.Fprintf(out, format, args...)
+		return err
+	}
 	ref := firstNonEmpty(report.Branch, report.Revision, "default branch")
 	if report.Branch != "" && report.Revision != "" && report.Branch != report.Revision {
 		ref = report.Branch + " @ " + report.Revision
 	}
 	if report.ConfigPath != "" {
-		if _, err := fmt.Fprintf(out, "gh-skill-check: source=%s ref=%s scope=%s config=%s\n", report.Source, ref, report.Scope, homeShorten(report.ConfigPath)); err != nil {
+		if err := writef("gh-skill-check: source=%s ref=%s scope=%s config=%s\n", report.Source, ref, report.Scope, homeShorten(report.ConfigPath)); err != nil {
 			return err
 		}
-	} else if _, err := fmt.Fprintf(out, "gh-skill-check: source=%s ref=%s scope=%s\n", report.Source, ref, report.Scope); err != nil {
+	} else if err := writef("gh-skill-check: source=%s ref=%s scope=%s\n", report.Source, ref, report.Scope); err != nil {
 		return err
 	}
 	for _, ignored := range report.ScanFailures {
-		if _, err := fmt.Fprintf(out, "ERROR scan: %s\n", ignored); err != nil {
+		if err := writef("ERROR scan: %s\n", ignored); err != nil {
 			return err
 		}
 	}
 	for _, issue := range report.Issues {
-		if _, err := fmt.Fprintf(out, "ERROR %s: %s — %s\n", issue.Location, issue.Kind, issue.Message); err != nil {
+		if err := writef("ERROR %s: %s — %s\n", issue.Location, issue.Kind, issue.Message); err != nil {
 			return err
 		}
 		if issue.Action != "" {
-			if _, err := fmt.Fprintf(out, "  fix: %s\n", issue.Action); err != nil {
+			if err := writef("  fix: %s\n", issue.Action); err != nil {
 				return err
 			}
 		}
 	}
 	if report.Ignored > 0 {
-		if _, err := fmt.Fprintf(out, "OK ignored: %d skill(s) matched project policy\n", report.Ignored); err != nil {
+		if err := writef("OK ignored: %d skill(s) matched project policy\n", report.Ignored); err != nil {
 			return err
 		}
 	}
 	if len(report.Issues) == 0 && len(report.ScanFailures) == 0 {
-		_, err := fmt.Fprintf(out, "OK: %d managed skill copy/copies are current; no outside skills found\n", report.Checked)
-		return err
+		return writef("OK: %d managed skill copy/copies are current; no outside skills found\n", report.Checked)
 	}
-	_, err := fmt.Fprintf(out, "FAIL: %d issue(s)\n", len(report.Issues)+len(report.ScanFailures))
-	return err
+	return writef("FAIL: %d issue(s)\n", len(report.Issues)+len(report.ScanFailures))
 }
