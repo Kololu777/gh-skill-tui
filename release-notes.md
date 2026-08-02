@@ -2,7 +2,24 @@
 
 ## Latest Changes
 
-* Release. PR [#16](https://github.com/Kololu777/gh-skill-tui/pull/16) by [@Kololu777](https://github.com/Kololu777).
+## 0.4.4 (2026-07-30)
+
+* chore(ci): add coverage target and use it in CI/test pipeline. PR [#26](https://github.com/Kololu777/gh-skill-tui/pull/26) by [@Kololu777](https://github.com/Kololu777).
+
+## 0.4.3 (2026-07-16)
+
+* fix(tui): promote merged outside skills to managed. PR [#23](https://github.com/Kololu777/gh-skill-tui/pull/23) by [@Kololu777](https://github.com/Kololu777).
+
+## 0.4.2 (2026-07-14)
+
+* fix(ci): set repository context when publishing releases. PR [#21](https://github.com/Kololu777/gh-skill-tui/pull/21) by [@Kololu777](https://github.com/Kololu777).
+
+## 0.4.1 (2026-07-14)
+
+* fix(ci): avoid release ref namespace conflict. PR [#19](https://github.com/Kololu777/gh-skill-tui/pull/19) by [@Kololu777](https://github.com/Kololu777).
+* feat(ci): adopt release-hub publishing workflow. PR [#18](https://github.com/Kololu777/gh-skill-tui/pull/18) by [@Kololu777](https://github.com/Kololu777).
+
+## 0.4.0
 
 ## 0.3.0
 

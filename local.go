@@ -45,6 +45,66 @@ type localOnlySkill struct {
 	Copies []localCopy
 }
 
+// reconcileMergedOutsideCopies promotes an outside copy when the configured
+// source now contains the exact tree that an import PR would have created for
+// it. This is intentionally content-based: an open/unmerged PR is absent from
+// the source revision, while an unrelated same-name skill with different
+// contents must remain an outside collision.
+//
+// The promotion is model-local and read-only. The installed SKILL.md is not
+// rewritten merely by opening the TUI; on every scan the source snapshot is
+// used to reconstruct the effective tracking metadata.
+func (m model) reconcileMergedOutsideCopies(targets []scanTarget) {
+	if len(m.skills) == 0 || len(m.blobShas) == 0 {
+		return
+	}
+	byDest := make(map[string]skill, len(m.skills))
+	for _, s := range m.skills {
+		byDest[s.Dir()] = s
+	}
+	for ti := range targets {
+		for si := range targets[ti].Skills {
+			inst := &targets[ti].Skills[si]
+			if m.copyFromConfiguredSource(*inst) || !validSkillPath(inst.Name) {
+				continue
+			}
+			s, ok := byDest[path.Join("skills", path.Clean(inst.Name))]
+			if !ok {
+				continue
+			}
+			key := m.skillKey(s)
+			if !sameFileSet(m.sourceFilesFor(key), inst.FileShas) {
+				continue
+			}
+
+			inst.Class = classManaged
+			inst.TreeSha = m.treeShas[key]
+			inst.Ref = m.ref
+			if m.sourceLocal {
+				inst.RepoSlug = ""
+				inst.GhPath = ""
+				inst.LocalPath = key
+			} else {
+				inst.RepoSlug = repoSlug(m.cfg.Source)
+				inst.GhPath = s.Dir()
+				inst.LocalPath = ""
+			}
+		}
+	}
+}
+
+func sameFileSet(source, installed map[string]string) bool {
+	if len(source) == 0 || len(source) != len(installed) {
+		return false
+	}
+	for rel, sha := range source {
+		if installed[rel] != sha {
+			return false
+		}
+	}
+	return true
+}
+
 // buildLocalOnly collects installed skills outside the configured source,
 // deduped by installed path and provenance across scan targets (both scopes):
 // external-source copies, no-tracking/manual copies, and configured-source

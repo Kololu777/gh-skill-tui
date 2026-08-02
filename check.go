@@ -90,8 +90,11 @@ func runSkillCheck(cfg config, projectRoot string) (checkReport, error) {
 		sourceLocal: sourceLocal,
 		sourceRoot:  sourceRoot,
 		skills:      skills,
+		treeShas:    trees,
 		blobShas:    blobs,
+		ref:         ref,
 	}
+	checker.reconcileMergedOutsideCopies(targets)
 
 	expected := make(map[string]string, len(skills))
 	for _, skill := range skills {

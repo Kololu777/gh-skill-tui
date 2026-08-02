@@ -1,5 +1,7 @@
 /gh-skill-tui
 *.test
+coverage.out
 .DS_Store
 .worktrees/
 .codex-homes/
+target

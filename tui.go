@@ -262,7 +262,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case installedScannedMsg:
 		m.targets = msg.Targets
-		m.lookup = buildInstallIndex(m.targets, m.copyFromConfiguredSource)
 		m.scanning = false
 		m.cursors[focusStatus] = min(m.cursors[focusStatus], max(0, len(m.targets)-1))
 		m.rebuildLocalOnly()
@@ -514,6 +513,8 @@ func (m *model) rebuildLocalOnly() {
 	for _, s := range m.skills {
 		sourceKeys[m.skillKey(s)] = true
 	}
+	m.reconcileMergedOutsideCopies(m.targets)
+	m.lookup = buildInstallIndex(m.targets, m.copyFromConfiguredSource)
 	m.localOnly = buildLocalOnly(m.targets, m.skills, sourceKeys, m.copyFromConfiguredSource)
 	keys := make(map[string]bool, len(m.localOnly))
 	for _, lo := range m.localOnly {
