@@ -459,6 +459,16 @@ func (e *planExec) Run() error {
 					}
 				}
 			}
+			// Snapshot the installed state into the root's lock file so
+			// check can tell local edits and source updates apart. Must
+			// run after injectLocalTracking: the lock records the final
+			// on-disk bytes.
+			if err := updateLockAfterInstall(entry); err != nil {
+				e.result.Skipped = append(e.result.Skipped, "lock file: "+err.Error())
+				if writeErrErr := writeErr("warning: lock file: %v\n", err); writeErrErr != nil {
+					return writeErrErr
+				}
+			}
 			e.result.Succeeded = append(e.result.Succeeded, entry.Skill+" → "+entry.Agent)
 		}
 	case opDelete:
@@ -474,6 +484,11 @@ func (e *planExec) Run() error {
 					}
 				}
 				continue
+			}
+			if rel, err := filepath.Rel(entry.Root, entry.Dir); err == nil {
+				if lockErr := removeLockEntry(entry.Root, filepath.ToSlash(rel)); lockErr != nil {
+					e.result.Skipped = append(e.result.Skipped, "lock file: "+lockErr.Error())
+				}
 			}
 			e.result.Succeeded = append(e.result.Succeeded, entry.Skill+" @"+entry.Agents)
 		}
@@ -1381,8 +1396,6 @@ func (m model) sourceContentFor(key string) string {
 // copyModified reports whether an installed copy differs from the current
 // source. Companion files are compared by git blob sha; the root SKILL.md is
 // compared semantically because gh re-serializes its frontmatter on install.
-// Only meaningful when the copy is not outdated: outdated copies are
-// expected to differ.
 func (m model) copyModified(inst installedSkill) bool {
 	if len(m.blobShas) == 0 || inst.Key() == "" || len(inst.FileShas) == 0 {
 		return false

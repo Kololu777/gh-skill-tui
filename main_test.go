@@ -2107,7 +2107,7 @@ func writeLocalInstalledSkill(t *testing.T, projectRoot, sourceRoot, body, treeS
 	}
 }
 
-func TestSkillCheckFindsOutdatedCopies(t *testing.T) {
+func TestSkillCheckFindsContentDifferences(t *testing.T) {
 	fileCfg = fileConfig{}
 	projectCfg = fileConfig{}
 	projectCfgPath = ""
@@ -2148,8 +2148,216 @@ func TestSkillCheckFindsOutdatedCopies(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(bad.Issues) != 1 || bad.Issues[0].Kind != "outdated" {
-		t.Fatalf("outdated check = %+v", bad)
+	if len(bad.Issues) != 1 || bad.Issues[0].Kind != "modified" {
+		t.Fatalf("content check = %+v", bad)
+	}
+}
+
+func TestSkillCheckUsesContentInsteadOfTrackingSHA(t *testing.T) {
+	fileCfg = fileConfig{}
+	projectCfg = fileConfig{}
+	projectCfgPath = ""
+	t.Cleanup(func() {
+		fileCfg = fileConfig{}
+		projectCfg = fileConfig{}
+		projectCfgPath = ""
+	})
+	source := makeCheckSource(t, "body")
+	project := t.TempDir()
+	skills, _, trees, _, err := loadSkills(config{Source: source})
+	if err != nil || len(skills) != 1 {
+		t.Fatalf("load source: skills=%v err=%v", skills, err)
+	}
+
+	// Missing metadata and stale metadata are both acceptable when the
+	// installed files themselves match the configured source.
+	for _, treeSHA := range []string{"", "stale-tree-sha"} {
+		writeLocalInstalledSkill(t, project, source, "body", treeSHA)
+		report, err := runSkillCheck(config{Source: source, Scope: "project"}, project)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(report.Issues) != 0 || report.Checked != 1 {
+			t.Fatalf("tree SHA %q with matching content = %+v", treeSHA, report)
+		}
+	}
+
+	// A matching tracking SHA does not hide an actual file difference.
+	writeLocalInstalledSkill(t, project, source, "edited", trees[filepath.Join(source, "skills", "demo")])
+	report, err := runSkillCheck(config{Source: source, Scope: "project"}, project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(report.Issues) != 1 || report.Issues[0].Kind != "modified" {
+		t.Fatalf("matching SHA with different content = %+v", report)
+	}
+}
+
+func commitCheckSource(t *testing.T, src, body string) {
+	t.Helper()
+	path := filepath.Join(src, "skills", "demo", "SKILL.md")
+	if err := os.WriteFile(path, []byte("---\nname: demo\n---\n"+body+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := runGit(src, "add", "skills/demo/SKILL.md"); err != nil {
+		t.Fatalf("git add: %v %s", err, out)
+	}
+	if out, err := runGit(src, "commit", "-qm", "update"); err != nil {
+		t.Fatalf("git commit: %v %s", err, out)
+	}
+}
+
+func demoTreeSha(t *testing.T, source string) string {
+	t.Helper()
+	_, _, trees, _, err := loadSkills(config{Source: source})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return trees[filepath.Join(source, "skills", "demo")]
+}
+
+// writeDemoLock snapshots the currently installed demo copy the way a TUI
+// install would: raw on-disk SKILL.md bytes plus the given source tree SHA.
+func writeDemoLock(t *testing.T, projectRoot, sourceRoot, treeSha string) {
+	t.Helper()
+	root := filepath.Join(projectRoot, ".agents", "skills")
+	content, err := os.ReadFile(filepath.Join(root, "demo", "SKILL.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry := lockEntry{
+		Path:    filepath.Join(sourceRoot, "skills", "demo"),
+		TreeSha: treeSha,
+		Files:   map[string]string{"SKILL.md": gitBlobSha(content)},
+	}
+	if err := writeLockEntry(root, "demo", entry); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSkillCheckLockSeparatesOutdatedModifiedConflict(t *testing.T) {
+	fileCfg = fileConfig{}
+	projectCfg = fileConfig{}
+	projectCfgPath = ""
+	t.Cleanup(func() {
+		fileCfg = fileConfig{}
+		projectCfg = fileConfig{}
+		projectCfgPath = ""
+	})
+
+	check := func(t *testing.T, source, project string) checkReport {
+		t.Helper()
+		report, err := runSkillCheck(config{Source: source, Scope: "project"}, project)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return report
+	}
+
+	t.Run("clean copy with moved source is outdated", func(t *testing.T) {
+		source := makeCheckSource(t, "v1")
+		project := t.TempDir()
+		writeLocalInstalledSkill(t, project, source, "v1", "")
+		writeDemoLock(t, project, source, demoTreeSha(t, source))
+		commitCheckSource(t, source, "v2")
+		report := check(t, source, project)
+		if len(report.Issues) != 1 || report.Issues[0].Kind != "outdated" {
+			t.Fatalf("outdated = %+v", report)
+		}
+	})
+
+	t.Run("edited copy with unchanged source is modified", func(t *testing.T) {
+		source := makeCheckSource(t, "v1")
+		project := t.TempDir()
+		writeLocalInstalledSkill(t, project, source, "v1", "")
+		writeDemoLock(t, project, source, demoTreeSha(t, source))
+		writeLocalInstalledSkill(t, project, source, "edited", "")
+		report := check(t, source, project)
+		if len(report.Issues) != 1 || report.Issues[0].Kind != "modified" {
+			t.Fatalf("modified = %+v", report)
+		}
+	})
+
+	t.Run("edited copy with moved source is conflict", func(t *testing.T) {
+		source := makeCheckSource(t, "v1")
+		project := t.TempDir()
+		writeLocalInstalledSkill(t, project, source, "v1", "")
+		writeDemoLock(t, project, source, demoTreeSha(t, source))
+		writeLocalInstalledSkill(t, project, source, "edited", "")
+		commitCheckSource(t, source, "v2")
+		report := check(t, source, project)
+		if len(report.Issues) != 1 || report.Issues[0].Kind != "conflict" {
+			t.Fatalf("conflict = %+v", report)
+		}
+	})
+
+	t.Run("stale lock after an external update stays ok", func(t *testing.T) {
+		source := makeCheckSource(t, "v1")
+		project := t.TempDir()
+		writeLocalInstalledSkill(t, project, source, "v1", "")
+		writeDemoLock(t, project, source, demoTreeSha(t, source))
+		commitCheckSource(t, source, "v2")
+		// gh skill update run outside the TUI: files current, lock stale.
+		writeLocalInstalledSkill(t, project, source, "v2", "")
+		report := check(t, source, project)
+		if len(report.Issues) != 0 || report.Checked != 1 {
+			t.Fatalf("stale lock = %+v", report)
+		}
+	})
+
+	t.Run("clean copy with unchanged source is ok", func(t *testing.T) {
+		source := makeCheckSource(t, "v1")
+		project := t.TempDir()
+		writeLocalInstalledSkill(t, project, source, "v1", "")
+		writeDemoLock(t, project, source, demoTreeSha(t, source))
+		report := check(t, source, project)
+		if len(report.Issues) != 0 || report.Checked != 1 {
+			t.Fatalf("clean = %+v", report)
+		}
+	})
+}
+
+func TestUpdateLockAfterInstallAndRemove(t *testing.T) {
+	dest := t.TempDir()
+	dir := filepath.Join(dest, "demo")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	content := "---\nname: demo\nmetadata:\n    github-repo: Owner/Repo\n    github-path: skills/demo\n    github-tree-sha: tree123\n---\nbody\n"
+	if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "helper.py"), []byte("print()\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := updateLockAfterInstall(planEntry{Skill: "skills/demo/SKILL.md", DestAbs: dest}); err != nil {
+		t.Fatal(err)
+	}
+	entry, ok := readLockFile(dest)["demo"]
+	if !ok {
+		t.Fatalf("lock entry missing: %+v", readLockFile(dest))
+	}
+	if entry.Source != "owner/repo" || entry.Path != "skills/demo" || entry.TreeSha != "tree123" {
+		t.Fatalf("entry = %+v", entry)
+	}
+	// SKILL.md is locked with its raw on-disk bytes, injected metadata
+	// included; companions with their plain content hash.
+	if entry.Files["SKILL.md"] != gitBlobSha([]byte(content)) {
+		t.Fatalf("SKILL.md sha = %+v", entry.Files)
+	}
+	if entry.Files["helper.py"] != gitBlobSha([]byte("print()\n")) {
+		t.Fatalf("helper.py sha = %+v", entry.Files)
+	}
+
+	if err := removeLockEntry(dest, "demo"); err != nil {
+		t.Fatal(err)
+	}
+	if entries := readLockFile(dest); entries != nil {
+		t.Fatalf("lock should be empty: %+v", entries)
+	}
+	if _, err := os.Stat(filepath.Join(dest, lockFileName)); !os.IsNotExist(err) {
+		t.Fatal("empty lock file must be removed")
 	}
 }
 

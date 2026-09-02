@@ -223,6 +223,16 @@ To exclude specific skills from the check, set `check_ignore_skills` in `.gh-ski
 check_ignore_skills = ["local-only", "tools/*"]
 ```
 
+Installs and updates done through the TUI record a snapshot of each copy into a `.gh-skill-lock.json` file next to the installed skills. With that snapshot, the check can tell the states apart instead of only reporting a difference:
+
+| State      | Meaning                                                | Suggested action                                    |
+| ---------- | ------------------------------------------------------ | --------------------------------------------------- |
+| `outdated` | Copy untouched, but the source has newer content       | Update; nothing local is lost                       |
+| `modified` | Copy edited locally, source unchanged                  | Propose a PR with `p`, or reinstall with `--force`  |
+| `conflict` | Copy edited locally **and** the source moved           | Propose a PR with `p`, or delete/reinstall the copy |
+
+Copies without a lock entry (older installs, or installs done with `gh skill` directly) fall back to comparing content against the source revision and are reported as `modified` when they differ. Committing the project-scope lock file is recommended so CI checks see the same baseline.
+
 ## Release Notes
 
 See [release-notes.md](release-notes.md).
